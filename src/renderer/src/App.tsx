@@ -1074,7 +1074,7 @@ function App(): React.JSX.Element {
               filesystem watchers + cached directory trees survive across
               open/close toggles. Unmount on the tasks view since that
               surface is intentionally distraction-free. */}
-          {showRightSidebarControls ? <RightSidebar /> : null}
+          {showRightSidebarControls ? <RightSidebar side="right" /> : null}
         </div>
         <StatusBar />
         {/* Why: NewWorkspaceComposerCard renders Radix <Tooltip>s that crash

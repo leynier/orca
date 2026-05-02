@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import { Files, Search, GitBranch, ListChecks, Cable, PanelRight } from 'lucide-react'
+import { Files, Search, GitBranch, ListChecks, Cable, PanelLeft, PanelRight } from 'lucide-react'
 import { useAppStore } from '@/store'
 import { getRepoMapFromState, useActiveWorktree, useRepoById } from '@/store/selectors'
 import { cn } from '@/lib/utils'
@@ -102,7 +102,15 @@ const ACTIVITY_ITEMS: ActivityBarItem[] = [
   }
 ]
 
-function RightSidebarInner(): React.JSX.Element {
+type RightSidebarProps = {
+  /** Physical edge this sidebar is docked to. Drives the inner-edge border,
+   *  resize-handle position, useSidebarResize deltaSign, the activity-bar
+   *  'side' strip orientation and the toggle icon, so the activity panel
+   *  can render on either window edge when the user swaps sidebar sides. */
+  side?: 'left' | 'right'
+}
+
+function RightSidebarInner({ side = 'right' }: RightSidebarProps): React.JSX.Element {
   const activeWorktree = useActiveWorktree()
   const rightSidebarOpen = useAppStore((s) => s.rightSidebarOpen)
   const rightSidebarWidth = useAppStore((s) => s.rightSidebarWidth)
@@ -211,7 +219,10 @@ function RightSidebarInner(): React.JSX.Element {
     width: rightSidebarWidth,
     minWidth: MIN_WIDTH,
     maxWidth,
-    deltaSign: -1,
+    // Why: when docked right, dragging left grows the sidebar (deltaSign -1);
+    // when docked left, dragging right grows it (deltaSign 1). The hook
+    // already supports either direction; only the sign needs to flip.
+    deltaSign: side === 'right' ? -1 : 1,
     renderedExtraWidth: activityBarSideWidth,
     setWidth: setRightSidebarWidth
   })
@@ -246,9 +257,19 @@ function RightSidebarInner(): React.JSX.Element {
       active={effectiveTab === item.id}
       onClick={() => setRightSidebarTab(item.id)}
       layout={activityBarPosition}
+      // Why: the 'side' strip flips edges with the sidebar, so each button
+      // needs to know the dock side to render its active marker and tooltip
+      // on the window-facing edge (matches VSCode's behavior).
+      sidebarSide={side}
       statusIndicator={item.id === 'checks' ? checksStatus : null}
     />
   ))
+
+  // Why: the toggle icon should point toward the panel it controls. When
+  // docked right, PanelRight points its filled edge to the right; when
+  // docked left, PanelLeft mirrors the affordance correctly.
+  const ToggleIcon = side === 'right' ? PanelRight : PanelLeft
+  const toggleLabel = `Toggle ${side} sidebar`
 
   const closeButton = rightSidebarOpen ? (
     <Tooltip>
@@ -257,27 +278,32 @@ function RightSidebarInner(): React.JSX.Element {
           type="button"
           className="sidebar-toggle mr-1"
           onClick={toggleRightSidebar}
-          aria-label="Toggle right sidebar"
+          aria-label={toggleLabel}
         >
-          <PanelRight size={16} />
+          <ToggleIcon size={16} />
         </button>
       </TooltipTrigger>
       <TooltipContent side="bottom" sideOffset={6}>
-        {`Toggle right sidebar (${isMac ? '⌘L' : 'Ctrl+L'})`}
+        {`${toggleLabel} (${isMac ? '⌘L' : 'Ctrl+L'})`}
       </TooltipContent>
     </Tooltip>
   ) : null
 
   return (
+    // Why: when docked left, flex-row-reverse mirrors the visual order of
+    // the panel and the 'side' activity-bar strip without disturbing DOM
+    // order, so screen readers still encounter panel content before the
+    // activity bar regardless of physical edge.
     <div
       ref={containerRef}
       className={cn(
-        'relative flex-shrink-0 flex flex-row',
-        // Why: overflow-visible is needed when open so the resize handle
-        // on the left edge remains interactive.  When closed (width 0),
-        // switch to overflow-hidden so the activity bar icons and panel
-        // content don't leak past the 0-width boundary (the component
-        // stays mounted for performance — see App.tsx).
+        'relative flex-shrink-0 flex',
+        side === 'left' ? 'flex-row-reverse' : 'flex-row',
+        // Why: overflow-visible is needed when open so the resize handle on
+        // the inner edge remains interactive. When closed (width 0), switch
+        // to overflow-hidden so the activity bar icons and panel content
+        // don't leak past the 0-width boundary (the component stays mounted
+        // for performance — see App.tsx).
         rightSidebarOpen ? 'overflow-visible' : 'overflow-hidden'
       )}
     >
@@ -285,7 +311,12 @@ function RightSidebarInner(): React.JSX.Element {
       <div
         className="flex flex-col flex-1 min-w-0 bg-sidebar overflow-hidden"
         style={{
-          borderLeft: rightSidebarOpen ? '1px solid var(--sidebar-border)' : 'none'
+          // Why: the panel border lives on the inner edge (the side facing
+          // the editor), which flips with the dock side.
+          borderLeft:
+            rightSidebarOpen && side === 'right' ? '1px solid var(--sidebar-border)' : undefined,
+          borderRight:
+            rightSidebarOpen && side === 'left' ? '1px solid var(--sidebar-border)' : undefined
         }}
       >
         {activityBarPosition === 'top' ? (
@@ -316,18 +347,28 @@ function RightSidebarInner(): React.JSX.Element {
 
         {panelContent}
 
-        {/* Resize handle on LEFT side */}
+        {/* Resize handle on the inner edge (away from the window border). */}
         <div
-          className="absolute top-0 left-0 w-1 h-full cursor-col-resize hover:bg-ring/20 active:bg-ring/30 transition-colors z-10"
+          className={cn(
+            'absolute top-0 w-1 h-full cursor-col-resize hover:bg-ring/20 active:bg-ring/30 transition-colors z-10',
+            side === 'right' ? 'left-0' : 'right-0'
+          )}
           onMouseDown={onResizeStart}
         />
       </div>
 
-      {/* Side Activity Bar (icon strip on right edge) — only for 'side' position */}
+      {/* Side Activity Bar (icon strip on the outer window edge) — only for 'side' position */}
       {activityBarPosition === 'side' && (
         <ContextMenu>
           <ContextMenuTrigger asChild>
-            <div className="flex flex-col items-center w-10 min-w-[40px] bg-sidebar border-l border-border">
+            <div
+              className={cn(
+                'flex flex-col items-center w-10 min-w-[40px] bg-sidebar border-border',
+                // Why: the strip sits against the outer window edge, so its
+                // border faces the panel — flipped with the dock side.
+                side === 'right' ? 'border-l' : 'border-r'
+              )}
+            >
               <TooltipProvider delayDuration={400}>{activityBarIcons}</TooltipProvider>
             </div>
           </ContextMenuTrigger>

@@ -29,16 +29,28 @@ export function ActivityBarButton({
   active,
   onClick,
   layout,
+  sidebarSide,
   statusIndicator
 }: {
   item: ActivityBarItem
   active: boolean
   onClick: () => void
   layout: 'top' | 'side'
+  /** Physical edge the parent sidebar is docked to. Only relevant for the
+   *  'side' layout — drives which edge the active marker / tooltip render
+   *  on so they always face the editor (not the window border). */
+  sidebarSide: 'left' | 'right'
   statusIndicator?: CheckStatus | null
 }): React.JSX.Element {
   const Icon = item.icon
   const isTop = layout === 'top'
+  // Why: when the activity bar is in the side strip, the strip sits flush
+  // against the outer window edge, so the active-tab marker and the tooltip
+  // should render on the side opposite the panel content (i.e. facing the
+  // editor). When docked left the strip is on the user's left, so the
+  // marker hugs the right edge of each icon and the tooltip opens to the
+  // right; mirrored when docked right.
+  const isStripOnLeft = !isTop && sidebarSide === 'left'
 
   return (
     <Tooltip>
@@ -70,11 +82,16 @@ export function ActivityBarButton({
             <div className="absolute bottom-0 left-[25%] right-[25%] h-[2px] bg-foreground rounded-t" />
           )}
           {active && !isTop && (
-            <div className="absolute right-0 top-[25%] bottom-[25%] w-[2px] bg-foreground rounded-l" />
+            <div
+              className={cn(
+                'absolute top-[25%] bottom-[25%] w-[2px] bg-foreground',
+                isStripOnLeft ? 'left-0 rounded-r' : 'right-0 rounded-l'
+              )}
+            />
           )}
         </button>
       </TooltipTrigger>
-      <TooltipContent side={isTop ? 'bottom' : 'left'} sideOffset={6}>
+      <TooltipContent side={isTop ? 'bottom' : isStripOnLeft ? 'right' : 'left'} sideOffset={6}>
         {item.shortcut ? `${item.title} (${item.shortcut})` : item.title}
       </TooltipContent>
     </Tooltip>
