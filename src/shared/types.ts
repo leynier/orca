@@ -1021,6 +1021,13 @@ export type GlobalSettings = {
    *  until the user explicitly wants worktree-scoped in-app browsing. */
   openLinksInApp: boolean
   rightSidebarOpenByDefault: boolean
+  /** Why: some users prefer the worktree sidebar on the right and the
+   *  activity panel (Explorer/Search/Source Control/Checks/Ports) on the
+   *  left — common ergonomic preferences (mouse-on-left setups, multi-
+   *  monitor layouts, parity with VSCode "Move Sidebar Right"). When true
+   *  the two sidebars swap physical sides; per-component widths are
+   *  preserved so resize choices are not lost when toggling. */
+  swapSidebarSides: boolean
   /** Whether to show the live agent activity count badge in the titlebar. */
   showTitlebarAgentActivity: boolean
   /** Why: some users do not use the Tasks feature and prefer to keep the
