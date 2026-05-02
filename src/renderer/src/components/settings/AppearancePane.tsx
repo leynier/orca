@@ -92,6 +92,11 @@ const LAYOUT_ENTRIES: SettingsSearchEntry[] = [
     title: 'Open Right Sidebar by Default',
     description: 'Automatically expand the file explorer panel when creating a new worktree.',
     keywords: ['layout', 'file explorer', 'sidebar']
+  },
+  {
+    title: 'Swap Sidebar Sides',
+    description: 'Show worktrees on the right and Explorer/Search/Source Control on the left.',
+    keywords: ['layout', 'sidebar', 'swap', 'flip', 'left', 'right', 'mirror', 'explorer']
   }
 ]
 
@@ -227,6 +232,39 @@ export function AppearancePane({
             <span
               className={`pointer-events-none block size-3.5 rounded-full bg-background shadow-sm transition-transform ${
                 settings.rightSidebarOpenByDefault ? 'translate-x-4' : 'translate-x-0.5'
+              }`}
+            />
+          </button>
+        </SearchableSetting>
+
+        <SearchableSetting
+          title="Swap Sidebar Sides"
+          description="Show worktrees on the right and Explorer/Search/Source Control on the left."
+          keywords={['layout', 'sidebar', 'swap', 'flip', 'left', 'right', 'mirror', 'explorer']}
+          className="flex items-center justify-between gap-4 px-1 py-2"
+        >
+          <div className="space-y-0.5">
+            <Label>Swap Sidebar Sides</Label>
+            <p className="text-xs text-muted-foreground">
+              Show worktrees on the right and Explorer/Search/Source Control on the left. Each
+              sidebar keeps its own width across toggles.
+            </p>
+          </div>
+          <button
+            role="switch"
+            aria-checked={settings.swapSidebarSides}
+            onClick={() =>
+              updateSettings({
+                swapSidebarSides: !settings.swapSidebarSides
+              })
+            }
+            className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border border-transparent transition-colors ${
+              settings.swapSidebarSides ? 'bg-foreground' : 'bg-muted-foreground/30'
+            }`}
+          >
+            <span
+              className={`pointer-events-none block size-3.5 rounded-full bg-background shadow-sm transition-transform ${
+                settings.swapSidebarSides ? 'translate-x-4' : 'translate-x-0.5'
               }`}
             />
           </button>
