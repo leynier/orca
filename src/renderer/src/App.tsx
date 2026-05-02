@@ -991,28 +991,47 @@ function App(): React.JSX.Element {
             {rightSidebarToggle}
           </div>
         ) : null}
-        <div className="flex flex-row flex-1 min-h-0 overflow-hidden">
-          {showSidebar ? (
+        {/* Why: when the user opts into 'swapSidebarSides', the worktree
+            sidebar moves to the right edge and the activity panel moves to
+            the left. Per-component widths are preserved (sidebarWidth and
+            rightSidebarWidth are independent slots) so resize choices
+            survive toggling. ⌘B / ⌘L keep targeting the same logical
+            sidebar regardless of physical position. */}
+        {(() => {
+          const swapSidebarSides = settings?.swapSidebarSides === true
+          const worktreeSidebarSide: 'left' | 'right' = swapSidebarSides ? 'right' : 'left'
+          const activitySidebarSide: 'left' | 'right' = swapSidebarSides ? 'left' : 'right'
+
+          const worktreeSidebarSlot = showSidebar ? (
             workspaceActive ? (
-              /* Why: left column wraps the sidebar with a titlebar-height
+              /* Why: this column wraps the sidebar with a titlebar-height
                  header above it. The header holds the same controls
                  (traffic lights, sidebar toggle, "Orca" title, agent badge)
-                 that the full-width titlebar held while the center and right
-                 columns keep their own top strips at the same 42px height.
-                 When the sidebar is collapsed, take this header out of flex
-                 layout so the terminal/editor reclaim the left edge instead of
-                 leaving behind a content-width blank strip. */
+                 that the full-width titlebar held while the center and the
+                 opposite-edge sidebar keep their own top strips at the same
+                 42px height. When the sidebar is collapsed, take this
+                 header out of flex layout so the terminal/editor reclaim
+                 that edge instead of leaving behind a content-width blank
+                 strip. The header position (left/right, border-r/l) mirrors
+                 with the dock side. */
               <div
                 className={`flex min-h-0 flex-col shrink-0${sidebarOpen ? '' : ' relative w-0 overflow-visible'}`}
               >
                 <div
                   // Why: when the sidebar is collapsed, titlebar-left floats
-                  // absolutely on top of the center column's own `border-l`
-                  // (see TabGroupSplitLayout), occluding that seam. Add a
-                  // `border-r` in the floating state so the vertical line
-                  // between the traffic-light/nav cluster and the tab strip
-                  // stays visible in both states.
-                  className={`titlebar-left${sidebarOpen ? '' : ' absolute top-0 left-0 z-10 border-r border-border'}`}
+                  // absolutely on top of the center column's own border (see
+                  // TabGroupSplitLayout), occluding that seam. Add a border
+                  // on the inner edge in the floating state so the vertical
+                  // line between the traffic-light/nav cluster and the tab
+                  // strip stays visible in both states. Mirrored when the
+                  // sidebar is docked right.
+                  className={`titlebar-left${
+                    sidebarOpen
+                      ? ''
+                      : worktreeSidebarSide === 'left'
+                        ? ' absolute top-0 left-0 z-10 border-r border-border'
+                        : ' absolute top-0 right-0 z-10 border-l border-border'
+                  }`}
                   style={{
                     // Why: the Sidebar resize hook updates the sidebar DOM width
                     // directly during drag and only persists to Zustand on
@@ -1030,52 +1049,66 @@ function App(): React.JSX.Element {
                       the sidebar falls back to its content height, so the
                       worktree list loses its scroll viewport and the fixed
                       bottom toolbar (including Add Project) gets pushed offscreen. */}
-                  <Sidebar side="left" />
+                  <Sidebar side={worktreeSidebarSide} />
                 </div>
               </div>
             ) : (
-              <Sidebar side="left" />
+              <Sidebar side={worktreeSidebarSide} />
             )
-          ) : null}
-          <div className="relative flex flex-1 min-w-0 min-h-0 overflow-hidden">
-            {/* Why: right sidebar toggle floats at the top-right of the center
-                column so it's always accessible whether the right sidebar is
-                open or closed. Match the RightSidebar header's 42px height and
-                top-0 anchor so the icon's vertical center is identical between
-                open and closed states — otherwise toggling makes the icon jump
-                a few pixels, which reads as layout jitter. */}
-            {workspaceActive && !rightSidebarOpen && (
-              <div
-                className="absolute top-0 right-0 z-10 flex items-center h-[42px]"
-                style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
-              >
-                {rightSidebarToggle}
-              </div>
-            )}
-            <div className="flex flex-1 min-w-0 min-h-0 flex-col">
-              <div
-                className={
-                  activeView !== 'terminal' || !activeWorktreeId
-                    ? 'hidden flex-1 min-w-0 min-h-0'
-                    : 'flex flex-1 min-w-0 min-h-0'
-                }
-              >
-                <Terminal />
-              </div>
-              <Suspense fallback={null}>
-                {activeView === 'settings' ? <Settings /> : null}
-                {activeView === 'tasks' ? <TaskPage /> : null}
-                {activeView === 'terminal' && !activeWorktreeId ? <Landing /> : null}
-              </Suspense>
-            </div>
-          </div>
-          {/* Why: keep RightSidebar mounted even when closed so that its
+          ) : null
+
+          /* Why: keep RightSidebar mounted even when closed so that its
               child components (FileExplorer, SourceControl, etc.) and their
               filesystem watchers + cached directory trees survive across
               open/close toggles. Unmount on the tasks view since that
-              surface is intentionally distraction-free. */}
-          {showRightSidebarControls ? <RightSidebar side="right" /> : null}
-        </div>
+              surface is intentionally distraction-free. */
+          const activitySidebarSlot = showRightSidebarControls ? (
+            <RightSidebar side={activitySidebarSide} />
+          ) : null
+
+          return (
+            <div className="flex flex-row flex-1 min-h-0 overflow-hidden">
+              {swapSidebarSides ? activitySidebarSlot : worktreeSidebarSlot}
+              <div className="relative flex flex-1 min-w-0 min-h-0 overflow-hidden">
+                {/* Why: right sidebar toggle floats at the inner-top corner of
+                    the center column so it's always accessible whether the
+                    activity sidebar is open or closed. Match the RightSidebar
+                    header's 42px height and top-0 anchor so the icon's
+                    vertical center is identical between open and closed
+                    states — otherwise toggling makes the icon jump a few
+                    pixels, which reads as layout jitter. The corner mirrors
+                    with the activity sidebar's dock side. */}
+                {workspaceActive && !rightSidebarOpen && (
+                  <div
+                    className={`absolute top-0 z-10 flex items-center h-[42px] ${
+                      activitySidebarSide === 'right' ? 'right-0' : 'left-0'
+                    }`}
+                    style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
+                  >
+                    {rightSidebarToggle}
+                  </div>
+                )}
+                <div className="flex flex-1 min-w-0 min-h-0 flex-col">
+                  <div
+                    className={
+                      activeView !== 'terminal' || !activeWorktreeId
+                        ? 'hidden flex-1 min-w-0 min-h-0'
+                        : 'flex flex-1 min-w-0 min-h-0'
+                    }
+                  >
+                    <Terminal />
+                  </div>
+                  <Suspense fallback={null}>
+                    {activeView === 'settings' ? <Settings /> : null}
+                    {activeView === 'tasks' ? <TaskPage /> : null}
+                    {activeView === 'terminal' && !activeWorktreeId ? <Landing /> : null}
+                  </Suspense>
+                </div>
+              </div>
+              {swapSidebarSides ? worktreeSidebarSlot : activitySidebarSlot}
+            </div>
+          )
+        })()}
         <StatusBar />
         {/* Why: NewWorkspaceComposerCard renders Radix <Tooltip>s that crash
             when mounted outside a TooltipProvider ancestor. Keep the global
