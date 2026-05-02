@@ -16,7 +16,14 @@ import OrcaYamlTrustDialog from './OrcaYamlTrustDialog'
 const MIN_WIDTH = 220
 const MAX_WIDTH = 500
 
-function Sidebar(): React.JSX.Element {
+type SidebarProps = {
+  /** Physical edge this sidebar is docked to. Drives resize direction and the
+   *  side of the resize handle so the worktree sidebar can render on either
+   *  edge of the window when the user swaps sidebar sides. */
+  side?: 'left' | 'right'
+}
+
+function Sidebar({ side = 'left' }: SidebarProps): React.JSX.Element {
   const sidebarOpen = useAppStore((s) => s.sidebarOpen)
   const sidebarWidth = useAppStore((s) => s.sidebarWidth)
   const setSidebarWidth = useAppStore((s) => s.setSidebarWidth)
@@ -36,7 +43,9 @@ function Sidebar(): React.JSX.Element {
     width: sidebarWidth,
     minWidth: MIN_WIDTH,
     maxWidth: MAX_WIDTH,
-    deltaSign: 1,
+    // Why: when docked left, dragging right grows the sidebar (deltaSign 1);
+    // when docked right, dragging left grows it (deltaSign -1).
+    deltaSign: side === 'left' ? 1 : -1,
     setWidth: setSidebarWidth
   })
 
@@ -55,9 +64,9 @@ function Sidebar(): React.JSX.Element {
         {/* Fixed bottom toolbar */}
         <SidebarToolbar />
 
-        {/* Resize handle */}
+        {/* Resize handle on the inner edge (away from the window border). */}
         <div
-          className="absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-ring/20 active:bg-ring/30 transition-colors z-10"
+          className={`absolute top-0 ${side === 'left' ? 'right-0' : 'left-0'} w-1 h-full cursor-col-resize hover:bg-ring/20 active:bg-ring/30 transition-colors z-10`}
           onMouseDown={onResizeStart}
         />
       </div>

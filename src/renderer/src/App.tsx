@@ -1030,11 +1030,11 @@ function App(): React.JSX.Element {
                       the sidebar falls back to its content height, so the
                       worktree list loses its scroll viewport and the fixed
                       bottom toolbar (including Add Project) gets pushed offscreen. */}
-                  <Sidebar />
+                  <Sidebar side="left" />
                 </div>
               </div>
             ) : (
-              <Sidebar />
+              <Sidebar side="left" />
             )
           ) : null}
           <div className="relative flex flex-1 min-w-0 min-h-0 overflow-hidden">
