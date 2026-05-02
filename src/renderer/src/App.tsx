@@ -1068,131 +1068,162 @@ function App(): React.JSX.Element {
             macOS traffic lights and left controls. Settings, landing,
             tasks and any view with sidebars swapped keep a full-width
             titlebar so macOS dots stay anchored to the top-left of the
-            window regardless of where the worktree sidebar lives. */}
-        {!workspaceActive || swapSidebarSides ? (
-          <div className="titlebar">
-            {swapSidebarSides ? (
-              <>
+            window regardless of where the worktree sidebar lives. The
+            titlebar's right-sidebar toggle is gated on !rightSidebarOpen
+            (closes #1354) so it doesn't double-render alongside the
+            close button inside the activity sidebar's own header. */}
+        {(() => {
+          const titlebarElement =
+            !workspaceActive || swapSidebarSides ? (
+              <div className="titlebar">
+                {swapSidebarSides ? (
+                  <>
+                    <div
+                      className={`flex items-center shrink-0${rightSidebarOpen ? ' overflow-hidden' : ' mr-2'}`}
+                      style={{ width: rightSidebarOpen ? rightSidebarWidth : undefined }}
+                    >
+                      {trafficLightPad}
+                      {!rightSidebarOpen && rightSidebarToggle}
+                    </div>
+                    <div
+                      id="titlebar-tabs"
+                      className={`flex flex-1 min-w-0 self-stretch${activeView !== 'terminal' || !activeWorktreeId ? ' invisible pointer-events-none' : ''}`}
+                    />
+                    {showTitlebarExpandButton && (
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <button
+                            className="titlebar-icon-button"
+                            onClick={handleToggleExpand}
+                            aria-label="Collapse pane"
+                            disabled={!activeTabCanExpand}
+                          >
+                            <Minimize2 size={14} />
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent side="bottom" sideOffset={6}>
+                          Collapse pane
+                        </TooltipContent>
+                      </Tooltip>
+                    )}
+                    <div
+                      className={`flex items-center shrink-0${showSidebar && sidebarOpen ? ' overflow-hidden' : ' ml-2'}`}
+                      style={{ width: showSidebar && sidebarOpen ? sidebarWidth : undefined }}
+                    >
+                      {worktreeClusterRightPositioned}
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div
+                      className={`flex items-center${showSidebar && sidebarOpen ? ' overflow-hidden shrink-0' : ' shrink-0 mr-2'}`}
+                      style={{ width: showSidebar && sidebarOpen ? sidebarWidth : undefined }}
+                    >
+                      {worktreeClusterLeftPositioned}
+                    </div>
+                    <div
+                      id="titlebar-tabs"
+                      className={`flex flex-1 min-w-0 self-stretch${activeView !== 'terminal' || !activeWorktreeId ? ' invisible pointer-events-none' : ''}`}
+                    />
+                    {showTitlebarExpandButton && (
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <button
+                            className="titlebar-icon-button"
+                            onClick={handleToggleExpand}
+                            aria-label="Collapse pane"
+                            disabled={!activeTabCanExpand}
+                          >
+                            <Minimize2 size={14} />
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent side="bottom" sideOffset={6}>
+                          Collapse pane
+                        </TooltipContent>
+                      </Tooltip>
+                    )}
+                    {!rightSidebarOpen && rightSidebarToggle}
+                  </>
+                )}
+              </div>
+            ) : null
+
+          const centerColumn = (
+            <div className="relative flex flex-1 min-w-0 min-h-0 overflow-hidden">
+              {/* Why: in default workspace mode (no full-width titlebar) the
+                  activity-sidebar toggle floats at the inner-top corner of
+                  the center column so it stays accessible whether the
+                  sidebar is open or closed. Match the RightSidebar header's
+                  42px height and top-0 anchor so the icon's vertical center
+                  is identical between open and closed states — otherwise
+                  toggling makes the icon jump a few pixels, which reads as
+                  layout jitter. When sidebars are swapped the full-width
+                  titlebar already hosts the toggle, so we skip the floating
+                  copy to avoid duplication. */}
+              {workspaceActive && !rightSidebarOpen && !swapSidebarSides && (
                 <div
-                  className={`flex items-center shrink-0${rightSidebarOpen ? ' overflow-hidden' : ' mr-2'}`}
-                  style={{ width: rightSidebarOpen ? rightSidebarWidth : undefined }}
+                  className="absolute top-0 right-0 z-10 flex items-center h-[42px]"
+                  style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
                 >
-                  {trafficLightPad}
                   {rightSidebarToggle}
                 </div>
+              )}
+              <div className="flex flex-1 min-w-0 min-h-0 flex-col">
                 <div
-                  id="titlebar-tabs"
-                  className={`flex flex-1 min-w-0 self-stretch${activeView !== 'terminal' || !activeWorktreeId ? ' invisible pointer-events-none' : ''}`}
-                />
-                {showTitlebarExpandButton && (
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <button
-                        className="titlebar-icon-button"
-                        onClick={handleToggleExpand}
-                        aria-label="Collapse pane"
-                        disabled={!activeTabCanExpand}
-                      >
-                        <Minimize2 size={14} />
-                      </button>
-                    </TooltipTrigger>
-                    <TooltipContent side="bottom" sideOffset={6}>
-                      Collapse pane
-                    </TooltipContent>
-                  </Tooltip>
-                )}
-                <div
-                  className={`flex items-center shrink-0${showSidebar && sidebarOpen ? ' overflow-hidden' : ' ml-2'}`}
-                  style={{ width: showSidebar && sidebarOpen ? sidebarWidth : undefined }}
+                  className={
+                    activeView !== 'terminal' || !activeWorktreeId
+                      ? 'hidden flex-1 min-w-0 min-h-0'
+                      : 'flex flex-1 min-w-0 min-h-0'
+                  }
                 >
-                  {worktreeClusterRightPositioned}
+                  <Terminal />
                 </div>
-              </>
-            ) : (
-              <>
-                <div
-                  className={`flex items-center${showSidebar && sidebarOpen ? ' overflow-hidden shrink-0' : ' shrink-0 mr-2'}`}
-                  style={{ width: showSidebar && sidebarOpen ? sidebarWidth : undefined }}
-                >
-                  {worktreeClusterLeftPositioned}
-                </div>
-                <div
-                  id="titlebar-tabs"
-                  className={`flex flex-1 min-w-0 self-stretch${activeView !== 'terminal' || !activeWorktreeId ? ' invisible pointer-events-none' : ''}`}
-                />
-                {showTitlebarExpandButton && (
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <button
-                        className="titlebar-icon-button"
-                        onClick={handleToggleExpand}
-                        aria-label="Collapse pane"
-                        disabled={!activeTabCanExpand}
-                      >
-                        <Minimize2 size={14} />
-                      </button>
-                    </TooltipTrigger>
-                    <TooltipContent side="bottom" sideOffset={6}>
-                      Collapse pane
-                    </TooltipContent>
-                  </Tooltip>
-                )}
-                {rightSidebarToggle}
-              </>
-            )}
-          </div>
-        ) : null}
-        {/* Why: when the user opts into 'swapSidebarSides', the worktree
-            sidebar moves to the right edge and the activity panel moves to
-            the left. Per-component widths are preserved (sidebarWidth and
-            rightSidebarWidth are independent slots) so resize choices
-            survive toggling. ⌘B / ⌘L keep targeting the same logical
-            sidebar regardless of physical position. The two slots carry
-            stable keys ('worktree-sidebar' / 'activity-sidebar') so React
-            preserves component identity when their positions swap —
-            otherwise RightSidebar's children (FileExplorer, SourceControl,
-            …) would lose their filesystem watchers and cached trees on
-            every toggle. */}
-        <div className="flex flex-row flex-1 min-h-0 overflow-hidden">
-          {swapSidebarSides ? activitySidebarSlot : worktreeSidebarSlot}
-          <div className="relative flex flex-1 min-w-0 min-h-0 overflow-hidden">
-            {/* Why: in default workspace mode (no full-width titlebar) the
-                activity-sidebar toggle floats at the inner-top corner of
-                the center column so it stays accessible whether the
-                sidebar is open or closed. Match the RightSidebar header's
-                42px height and top-0 anchor so the icon's vertical center
-                is identical between open and closed states — otherwise
-                toggling makes the icon jump a few pixels, which reads as
-                layout jitter. When sidebars are swapped the full-width
-                titlebar already hosts the toggle, so we skip the floating
-                copy to avoid duplication. */}
-            {workspaceActive && !rightSidebarOpen && !swapSidebarSides && (
-              <div
-                className="absolute top-0 right-0 z-10 flex items-center h-[42px]"
-                style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
-              >
-                {rightSidebarToggle}
+                <Suspense fallback={null}>
+                  {activeView === 'settings' ? <Settings /> : null}
+                  {activeView === 'tasks' ? <TaskPage /> : null}
+                  {activeView === 'terminal' && !activeWorktreeId ? <Landing /> : null}
+                </Suspense>
               </div>
-            )}
-            <div className="flex flex-1 min-w-0 min-h-0 flex-col">
-              <div
-                className={
-                  activeView !== 'terminal' || !activeWorktreeId
-                    ? 'hidden flex-1 min-w-0 min-h-0'
-                    : 'flex flex-1 min-w-0 min-h-0'
-                }
-              >
-                <Terminal />
-              </div>
-              <Suspense fallback={null}>
-                {activeView === 'settings' ? <Settings /> : null}
-                {activeView === 'tasks' ? <TaskPage /> : null}
-                {activeView === 'terminal' && !activeWorktreeId ? <Landing /> : null}
-              </Suspense>
             </div>
-          </div>
-          {swapSidebarSides ? worktreeSidebarSlot : activitySidebarSlot}
-        </div>
+          )
+
+          // Why: when sidebars are swapped we keep the full-width titlebar
+          // anchored to the top of the window (above every column). When
+          // they are not swapped we lift the activity sidebar (right) to
+          // be a sibling of the titlebar+center wrapper so its own header
+          // anchors at the top of the window in landing/settings/tasks
+          // views — matching workspace-view alignment (closes #1354).
+          // Doing the same lift in swap=on would put the activity panel
+          // (now on the left) at top:0 where macOS draws its traffic
+          // lights, causing the dots to overlap the activity-bar icons.
+          // The two slots carry stable keys ('worktree-sidebar' /
+          // 'activity-sidebar') so React preserves component identity
+          // when positions swap.
+          if (swapSidebarSides) {
+            return (
+              <>
+                {titlebarElement}
+                <div className="flex flex-row flex-1 min-h-0 overflow-hidden">
+                  {activitySidebarSlot}
+                  {centerColumn}
+                  {worktreeSidebarSlot}
+                </div>
+              </>
+            )
+          }
+          return (
+            <div className="flex flex-row flex-1 min-h-0 overflow-hidden">
+              <div className="flex flex-col flex-1 min-w-0 min-h-0">
+                {titlebarElement}
+                <div className="flex flex-row flex-1 min-h-0 overflow-hidden">
+                  {worktreeSidebarSlot}
+                  {centerColumn}
+                </div>
+              </div>
+              {activitySidebarSlot}
+            </div>
+          )
+        })()}
         <StatusBar />
         {/* Why: NewWorkspaceComposerCard renders Radix <Tooltip>s that crash
             when mounted outside a TooltipProvider ancestor. Keep the global
