@@ -308,6 +308,42 @@ function RightSidebarInner({
     </Tooltip>
   ) : null
 
+  // Why: the close button stays adjacent to the activity-bar icons / panel
+  // title regardless of dock side. When docked right the outer header's
+  // `justify-between` separates [icons-group][closeButton] across the row;
+  // when docked left we wrap close+icons in a single inner flex so they
+  // sit together on the inner (left) edge instead of being pushed apart.
+  const topHeaderRow =
+    side === 'left' ? (
+      <div className="flex items-center">
+        {closeButton}
+        {activityBarIcons}
+      </div>
+    ) : (
+      <>
+        <div className="flex items-center">{activityBarIcons}</div>
+        {closeButton}
+      </>
+    )
+
+  const sideHeaderTitle = (
+    <span className="text-[11px] font-semibold uppercase tracking-wider text-foreground">
+      {visibleItems.find((item) => item.id === effectiveTab)?.title ?? ''}
+    </span>
+  )
+  const sideHeaderRow =
+    side === 'left' ? (
+      <div className="flex items-center gap-2">
+        {closeButton}
+        {sideHeaderTitle}
+      </div>
+    ) : (
+      <>
+        {sideHeaderTitle}
+        {closeButton}
+      </>
+    )
+
   return (
     // Why: when docked left, flex-row-reverse mirrors the visual order of
     // the panel and the 'side' activity-bar strip without disturbing DOM
@@ -351,26 +387,7 @@ function RightSidebarInner({
                   reserveTrafficLightPad ? { paddingLeft: TRAFFIC_LIGHT_PAD_WIDTH } : undefined
                 }
               >
-                <TooltipProvider delayDuration={400}>
-                  {/* Why: the close/toggle button is grouped with the
-                      activity-bar icons rather than pushed to the opposite
-                      edge by justify-between. When docked left it sits
-                      right before the icons (immediately after the macOS
-                      pad if reserved); when docked right it sits right
-                      after them. Either way it stays adjacent to the
-                      icons it controls. */}
-                  {side === 'left' ? (
-                    <div className="flex items-center">
-                      {closeButton}
-                      {activityBarIcons}
-                    </div>
-                  ) : (
-                    <>
-                      <div className="flex items-center">{activityBarIcons}</div>
-                      {closeButton}
-                    </>
-                  )}
-                </TooltipProvider>
+                <TooltipProvider delayDuration={400}>{topHeaderRow}</TooltipProvider>
               </div>
             </ContextMenuTrigger>
             <ActivityBarPositionMenu
@@ -387,26 +404,7 @@ function RightSidebarInner({
             )}
             style={reserveTrafficLightPad ? { paddingLeft: TRAFFIC_LIGHT_PAD_WIDTH } : undefined}
           >
-            <TooltipProvider delayDuration={400}>
-              {/* Why: same inner-edge alignment as the 'top' header — the
-                  close button stays next to the panel title regardless of
-                  which side the sidebar is docked to. */}
-              {side === 'left' ? (
-                <div className="flex items-center gap-2">
-                  {closeButton}
-                  <span className="text-[11px] font-semibold uppercase tracking-wider text-foreground">
-                    {visibleItems.find((item) => item.id === effectiveTab)?.title ?? ''}
-                  </span>
-                </div>
-              ) : (
-                <>
-                  <span className="text-[11px] font-semibold uppercase tracking-wider text-foreground">
-                    {visibleItems.find((item) => item.id === effectiveTab)?.title ?? ''}
-                  </span>
-                  {closeButton}
-                </>
-              )}
-            </TooltipProvider>
+            <TooltipProvider delayDuration={400}>{sideHeaderRow}</TooltipProvider>
           </div>
         )}
 
