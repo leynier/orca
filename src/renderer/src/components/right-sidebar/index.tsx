@@ -114,6 +114,11 @@ type RightSidebarProps = {
    *  dots. Width matches the global `.titlebar-traffic-light-pad`
    *  (calc(80px / var(--ui-zoom-factor, 1))) so it scales with UI zoom. */
   reserveTrafficLightPad?: boolean
+  /** When true the internal header collapses to the 32px tab-strip height
+   *  so the bottom-border lines up with the adjacent tab-group panel in
+   *  workspace mode. Defaults to the legacy 42px height that matches the
+   *  full-width titlebar used in landing/settings/tasks views. */
+  compactHeader?: boolean
 }
 
 // Why: keep in sync with the `.titlebar-traffic-light-pad` rule in
@@ -122,7 +127,8 @@ const TRAFFIC_LIGHT_PAD_WIDTH = 'calc(80px / var(--ui-zoom-factor, 1))'
 
 function RightSidebarInner({
   side = 'right',
-  reserveTrafficLightPad = false
+  reserveTrafficLightPad = false,
+  compactHeader = false
 }: RightSidebarProps): React.JSX.Element {
   const activeWorktree = useActiveWorktree()
   const rightSidebarOpen = useAppStore((s) => s.rightSidebarOpen)
@@ -338,7 +344,8 @@ function RightSidebarInner({
             <ContextMenuTrigger asChild>
               <div
                 className={cn(
-                  'flex items-center justify-between border-b border-border h-[42px] min-h-[42px] pr-1',
+                  'flex items-center justify-between border-b border-border pr-1',
+                  compactHeader ? 'h-[32px] min-h-[32px]' : 'h-[42px] min-h-[42px]',
                   reserveTrafficLightPad ? '' : 'pl-2'
                 )}
                 style={
@@ -360,7 +367,8 @@ function RightSidebarInner({
           /* ── Side layout: static title header ── */
           <div
             className={cn(
-              'flex items-center justify-between h-[42px] min-h-[42px] pr-3 border-b border-border',
+              'flex items-center justify-between pr-3 border-b border-border',
+              compactHeader ? 'h-[32px] min-h-[32px]' : 'h-[42px] min-h-[42px]',
               reserveTrafficLightPad ? '' : 'pl-3'
             )}
             style={reserveTrafficLightPad ? { paddingLeft: TRAFFIC_LIGHT_PAD_WIDTH } : undefined}
@@ -395,11 +403,13 @@ function RightSidebarInner({
                 // border faces the panel — flipped with the dock side.
                 side === 'right' ? 'border-l' : 'border-r',
                 // Why: when the strip hugs the macOS traffic-light corner,
-                // push the first icon below the 42px-tall dot row so the
-                // dots don't draw on top of it. The 'top' header path
-                // doesn't need this because that header itself takes up
-                // the same 42px and reserves the pad horizontally.
-                reserveTrafficLightPad ? 'pt-[42px]' : ''
+                // push the first icon below the dot row so the dots don't
+                // draw on top of it. The padding matches the adjacent
+                // header height (compact = 32px tab-strip height, default
+                // = 42px titlebar height). The 'top' header path doesn't
+                // need this because that header itself reserves the pad
+                // horizontally.
+                reserveTrafficLightPad ? (compactHeader ? 'pt-[32px]' : 'pt-[42px]') : ''
               )}
             >
               <TooltipProvider delayDuration={400}>{activityBarIcons}</TooltipProvider>
