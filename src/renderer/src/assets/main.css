@@ -319,8 +319,11 @@
 .titlebar {
   height: 42px;
   min-height: 42px;
+  /* Why: no `flex-direction` here so a Tailwind utility on the element
+     (e.g. `flex-row-reverse`) can flip the cluster order in swap=on. The
+     default for `display: flex` is `row`, so omitting it keeps swap=off
+     visually identical. */
   display: flex;
-  flex-direction: row;
   align-items: center;
   background: var(--bg-titlebar, var(--card));
   border-bottom: 1px solid var(--border);

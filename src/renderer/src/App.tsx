@@ -1039,92 +1039,64 @@ function App(): React.JSX.Element {
     }
   }, [activeView, rightSidebarOpen, actions])
 
+  // Why: in non-workspace views the full-width titlebar hosts both clusters.
+  // DOM order is fixed [worktreeWrapper, tabs, expandButton, activityToggle];
+  // `flex-row-reverse` flips the visual order in swap=on without changing
+  // DOM (a11y / portal id stay stable). The activity-toggle slot adds the
+  // traffic-light pad only in swap=on — in swap=off the pad lives in the
+  // worktreeCluster on the opposite edge, so the bare toggle button sits
+  // alone at the right.
   const titlebarElement = !workspaceActive ? (
-    <div className="titlebar">
-      {swapSidebarSides ? (
-        <>
-          {!rightSidebarOpen && (
-            <div className="flex items-center shrink-0 mr-2">
-              {trafficLightPad}
-              {rightSidebarToggle}
-            </div>
-          )}
-          <div
-            id="titlebar-tabs"
-            className={`flex flex-1 min-w-0 self-stretch${activeView !== 'terminal' || !activeWorktreeId ? ' invisible pointer-events-none' : ''}`}
-          />
-          {showTitlebarExpandButton && (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <button
-                  className="titlebar-icon-button"
-                  onClick={handleToggleExpand}
-                  aria-label="Collapse pane"
-                  disabled={!activeTabCanExpand}
-                >
-                  <Minimize2 size={14} />
-                </button>
-              </TooltipTrigger>
-              <TooltipContent side="bottom" sideOffset={6}>
-                Collapse pane
-              </TooltipContent>
-            </Tooltip>
-          )}
-          <div
-            className={`flex items-center shrink-0${showSidebar && sidebarOpen ? ' overflow-hidden' : ' ml-2'}`}
-            style={{
-              // Why: --worktree-sidebar-live-width tracks the
-              // sidebar's in-flight drag width and falls back to
-              // the persisted sidebarWidth when no drag is active.
-              // Without it the back/forward arrows inside the
-              // cluster snap into place only on mouseup instead of
-              // following the resize handle.
-              width:
-                showSidebar && sidebarOpen
-                  ? `var(${WORKTREE_SIDEBAR_LIVE_WIDTH_VAR}, ${sidebarWidth}px)`
-                  : undefined
-            }}
-          >
-            {worktreeCluster}
-          </div>
-        </>
-      ) : (
-        <>
-          <div
-            className={`flex items-center${showSidebar && sidebarOpen ? ' overflow-hidden shrink-0' : ' shrink-0 mr-2'}`}
-            style={{
-              width:
-                showSidebar && sidebarOpen
-                  ? `var(${WORKTREE_SIDEBAR_LIVE_WIDTH_VAR}, ${sidebarWidth}px)`
-                  : undefined
-            }}
-          >
-            {worktreeCluster}
-          </div>
-          <div
-            id="titlebar-tabs"
-            className={`flex flex-1 min-w-0 self-stretch${activeView !== 'terminal' || !activeWorktreeId ? ' invisible pointer-events-none' : ''}`}
-          />
-          {showTitlebarExpandButton && (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <button
-                  className="titlebar-icon-button"
-                  onClick={handleToggleExpand}
-                  aria-label="Collapse pane"
-                  disabled={!activeTabCanExpand}
-                >
-                  <Minimize2 size={14} />
-                </button>
-              </TooltipTrigger>
-              <TooltipContent side="bottom" sideOffset={6}>
-                Collapse pane
-              </TooltipContent>
-            </Tooltip>
-          )}
-          {!rightSidebarOpen && rightSidebarToggle}
-        </>
+    <div className={`titlebar${swapSidebarSides ? ' flex-row-reverse' : ''}`}>
+      <div
+        className={`flex items-center shrink-0${
+          showSidebar && sidebarOpen ? ' overflow-hidden' : swapSidebarSides ? ' ml-2' : ' mr-2'
+        }`}
+        style={{
+          // Why: --worktree-sidebar-live-width tracks the sidebar's
+          // in-flight drag width and falls back to the persisted
+          // sidebarWidth when no drag is active. Without it the
+          // back/forward arrows inside the cluster snap into place
+          // only on mouseup instead of following the resize handle.
+          width:
+            showSidebar && sidebarOpen
+              ? `var(${WORKTREE_SIDEBAR_LIVE_WIDTH_VAR}, ${sidebarWidth}px)`
+              : undefined
+        }}
+      >
+        {worktreeCluster}
+      </div>
+      <div
+        id="titlebar-tabs"
+        className={`flex flex-1 min-w-0 self-stretch${activeView !== 'terminal' || !activeWorktreeId ? ' invisible pointer-events-none' : ''}`}
+      />
+      {showTitlebarExpandButton && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              className="titlebar-icon-button"
+              onClick={handleToggleExpand}
+              aria-label="Collapse pane"
+              disabled={!activeTabCanExpand}
+            >
+              <Minimize2 size={14} />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom" sideOffset={6}>
+            Collapse pane
+          </TooltipContent>
+        </Tooltip>
       )}
+      {!rightSidebarOpen ? (
+        swapSidebarSides ? (
+          <div className="flex items-center shrink-0 mr-2">
+            {trafficLightPad}
+            {rightSidebarToggle}
+          </div>
+        ) : (
+          rightSidebarToggle
+        )
+      ) : null}
     </div>
   ) : null
 
