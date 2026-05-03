@@ -912,19 +912,14 @@ function App(): React.JSX.Element {
       </>
     ) : null
 
-  // Why: the "worktree cluster" sticks to whichever side the worktree
-  // sidebar is docked to. When docked left, the cluster reads
-  // [tlp][toggle][badge] … [navArrows] (existing default). When docked
-  // right, the cluster mirrors to [navArrows] … [badge][toggle] so the
-  // toggle stays adjacent to the sidebar it controls. The traffic-light
-  // pad is omitted in the right-positioned variant — it lives in the
-  // activity cluster on the left edge instead.
-  // Why: measure the ENTIRE row (traffic-light pad + sidebar toggle + agent
-  // badge + back/forward group) so the sidebar-collapse spacer in
-  // TabGroupPanel reserves enough width to clear the full floating
-  // `titlebar-left`. Measuring only the inner control cluster left the
-  // back/forward arrows hanging over the first tab when the sidebar was
-  // collapsed (Cmd+B), producing a half-occluded, non-scrollable tab strip.
+  // Why: the cluster mirrors with the worktree sidebar's dock side so the
+  // toggle stays adjacent to the sidebar it controls. Pad lives in the
+  // left-positioned variant only — when swapped, it migrates to the
+  // activity cluster on the opposite edge.
+  // Why ref on the outer container: TabGroupPanel reads its width to size
+  // the sidebar-collapse spacer. Measuring just the inner control cluster
+  // would let the nav arrows overhang the first tab once the sidebar
+  // collapses, producing a half-occluded, non-scrollable tab strip.
   const worktreeClusterLeftPositioned = (
     <div ref={titlebarLeftControlsRef} className="flex h-full w-full shrink-0 items-center">
       <div className="flex h-full items-center">
@@ -978,24 +973,13 @@ function App(): React.JSX.Element {
       ? ' absolute top-0 left-0 z-10 border-r border-border'
       : ' absolute top-0 right-0 z-10 border-l border-border'
 
-  // Why: stable keys are required so React tracks each sidebar instance by
-  // identity rather than by position. Without keys, swapping the slots in
-  // the layout below would unmount/remount RightSidebar and tear down the
-  // FileExplorer / SourceControl filesystem watchers and cached trees.
   const worktreeSidebarSlot = showSidebar ? (
     workspaceActive ? (
-      /* Why: in workspace view the worktree sidebar wraps its own 42px
-         header so the sidebar toggle, agent badge, and back/forward
-         arrows sit above the worktree list without forcing tab groups +
-         terminal below a full-width titlebar. The header content
-         mirrors with the dock side: when the sidebar is on the left
-         (default) macOS traffic lights live inside this header on the
-         outer edge; when swapped to the right the lights are in the
-         activity-sidebar header on the left of the screen, so this
-         header drops the pad and just renders the mirrored cluster.
-         When the sidebar is collapsed, take this header out of flex
-         layout so the terminal/editor reclaim that edge instead of
-         leaving a content-width blank strip. */
+      /* Why: in workspace view the sidebar carries its own 42px header so
+         tab groups + terminal can extend to the top of the window
+         instead of sitting below a full-width titlebar. When the sidebar
+         is collapsed the header drops out of flex layout (`w-0` +
+         `overflow-visible`) so the editor reclaims that edge. */
       <div
         key="worktree-sidebar"
         className={`flex min-h-0 flex-col shrink-0${sidebarOpen ? '' : ' relative w-0 overflow-visible'}`}
@@ -1038,11 +1022,9 @@ function App(): React.JSX.Element {
       watchers + cached directory trees survive across open/close toggles.
       Unmount on the tasks view since that surface is intentionally
       distraction-free. */
-  // Why: when the activity sidebar is docked left it sits flush against
-  // the macOS traffic-light corner. Tell RightSidebar to reserve the same
-  // 80px pad inside its own header so the icons clear the dots — only on
-  // macOS in non-fullscreen (matching the rule that drives trafficLightPad
-  // elsewhere).
+  // Why: when the activity sidebar is docked left on macOS (non-fullscreen)
+  // it sits flush against the traffic-light corner, so it must reserve the
+  // 80px pad inside its own header for the icons to clear the dots.
   const reserveActivitySidebarTrafficLightPad =
     activitySidebarSide === 'left' && isMac && !isFullScreen
   const activitySidebarSlot = showRightSidebarControls ? (
@@ -1081,23 +1063,21 @@ function App(): React.JSX.Element {
             The hooks' internal early-returns remain as defense-in-depth
             (see the comment above useIpcEvents()). */}
         {agentDashboardEnabled ? <RetainedAgentsSyncGate /> : null}
-        {/* Why: in workspace view (any swap mode) the full-width titlebar is
-            removed so tab groups + terminal extend to the top of the
-            window — the worktree sidebar's own 42px header carries the
-            sidebar toggle, agent badge, and back/forward arrows, and
-            (when docked left) the macOS traffic-light pad. Settings,
-            landing, and the tasks page render the full-width titlebar
-            inside the wrapper. The activity sidebar (lifted to be a
-            sibling of the wrapper in both swap modes) anchors its own
-            header at top:0 of the window — matching the workspace-view
-            alignment that closes #1354. In swap=on the activity sidebar
-            reserves the traffic-light pad inside its own header so the
-            dots clear the activity-bar icons; when the activity sidebar
-            is closed (width 0) a floating bar at the inner-top corner
-            of the center column takes over the pad reservation and
-            hosts the toggle. The two slots carry stable keys
-            ('worktree-sidebar' / 'activity-sidebar') so React preserves
-            component identity when positions swap. */}
+        {/* Layout shape:
+              - Workspace view drops the full-width titlebar so each column
+                extends to the window top; the worktree sidebar carries its
+                own 42px header with the toggle, agent badge, and nav arrows
+                (and the traffic-light pad when docked left).
+              - Settings / landing / tasks render the full-width titlebar
+                inside the wrapper instead.
+              - The activity sidebar is a sibling of the wrapper so its
+                header anchors at top:0 of the window in every mode. When
+                closed (width 0), a floating bar at the inner-top corner of
+                the center column takes over the toggle and (in swap=on)
+                the traffic-light pad.
+              - Stable keys ('worktree-sidebar' / 'activity-sidebar')
+                preserve component identity when slots swap, so the
+                FileExplorer / SourceControl watchers survive the toggle. */}
         {(() => {
           const titlebarElement = !workspaceActive ? (
             <div className="titlebar">
