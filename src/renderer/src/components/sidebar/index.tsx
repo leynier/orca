@@ -54,6 +54,14 @@ function Sidebar({ side = 'left' }: SidebarProps): React.JSX.Element {
       <div
         ref={containerRef}
         className="relative min-h-0 flex-shrink-0 bg-sidebar flex flex-col overflow-hidden scrollbar-sleek-parent"
+        style={{
+          // Why: when docked left the seam between this sidebar and the
+          // center column is painted by TabGroupSplitLayout's `border-l`.
+          // When docked right the center column has no border on that edge,
+          // so we paint our own inner-edge border here to separate the
+          // worktree list from the editor / terminal pane.
+          borderLeft: side === 'right' ? '1px solid var(--sidebar-border)' : undefined
+        }}
       >
         {/* Fixed controls */}
         <SidebarNav />
