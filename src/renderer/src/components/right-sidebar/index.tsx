@@ -346,8 +346,24 @@ function RightSidebarInner({
                 }
               >
                 <TooltipProvider delayDuration={400}>
-                  <div className="flex items-center">{activityBarIcons}</div>
-                  {closeButton}
+                  {/* Why: the close/toggle button is grouped with the
+                      activity-bar icons rather than pushed to the opposite
+                      edge by justify-between. When docked left it sits
+                      right before the icons (immediately after the macOS
+                      pad if reserved); when docked right it sits right
+                      after them. Either way it stays adjacent to the
+                      icons it controls. */}
+                  {side === 'left' ? (
+                    <div className="flex items-center">
+                      {closeButton}
+                      {activityBarIcons}
+                    </div>
+                  ) : (
+                    <>
+                      <div className="flex items-center">{activityBarIcons}</div>
+                      {closeButton}
+                    </>
+                  )}
                 </TooltipProvider>
               </div>
             </ContextMenuTrigger>
@@ -365,10 +381,26 @@ function RightSidebarInner({
             )}
             style={reserveTrafficLightPad ? { paddingLeft: TRAFFIC_LIGHT_PAD_WIDTH } : undefined}
           >
-            <span className="text-[11px] font-semibold uppercase tracking-wider text-foreground">
-              {visibleItems.find((item) => item.id === effectiveTab)?.title ?? ''}
-            </span>
-            <TooltipProvider delayDuration={400}>{closeButton}</TooltipProvider>
+            <TooltipProvider delayDuration={400}>
+              {/* Why: same inner-edge alignment as the 'top' header — the
+                  close button stays next to the panel title regardless of
+                  which side the sidebar is docked to. */}
+              {side === 'left' ? (
+                <div className="flex items-center gap-2">
+                  {closeButton}
+                  <span className="text-[11px] font-semibold uppercase tracking-wider text-foreground">
+                    {visibleItems.find((item) => item.id === effectiveTab)?.title ?? ''}
+                  </span>
+                </div>
+              ) : (
+                <>
+                  <span className="text-[11px] font-semibold uppercase tracking-wider text-foreground">
+                    {visibleItems.find((item) => item.id === effectiveTab)?.title ?? ''}
+                  </span>
+                  {closeButton}
+                </>
+              )}
+            </TooltipProvider>
           </div>
         )}
 
