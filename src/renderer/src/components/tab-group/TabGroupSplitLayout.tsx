@@ -92,6 +92,7 @@ function SplitNode({
   touchesTopEdge,
   touchesRightEdge,
   touchesLeftEdge,
+  swapSidebarSides,
   isTabDragActive,
   activeDropGroupId,
   activeDropZone,
@@ -106,19 +107,21 @@ function SplitNode({
   touchesTopEdge: boolean
   touchesRightEdge: boolean
   touchesLeftEdge: boolean
+  // Why: when the user opts into 'swapSidebarSides', the floating activity
+  // toggle moves from the right edge of the tab strip to the left edge, and
+  // the collapsed worktree-sidebar header moves from the left edge to the
+  // right edge. Mirror the reservation flags so each spacer keeps
+  // representing the same logical affordance regardless of physical side;
+  // TabGroupPanel decides which DOM position to render them on. Threaded
+  // from the layout root so the recursive split tree subscribes to the
+  // setting once instead of once per leaf.
+  swapSidebarSides: boolean
   isTabDragActive: boolean
   activeDropGroupId: string | null
   activeDropZone: TabDropZone | null
   hoveredTabInsertion: HoveredTabInsertion | null
 }): React.JSX.Element {
   const setTabGroupSplitRatio = useAppStore((state) => state.setTabGroupSplitRatio)
-  // Why: when the user opts into 'swapSidebarSides', the floating activity
-  // toggle moves from the right edge of the tab strip to the left edge,
-  // and the collapsed worktree-sidebar header moves from the left edge to
-  // the right edge. Mirror the reservation flags so each spacer keeps
-  // representing the same logical affordance regardless of physical side;
-  // TabGroupPanel decides which DOM position to render them on.
-  const swapSidebarSides = useAppStore((s) => s.settings?.swapSidebarSides === true)
 
   if (node.type === 'leaf') {
     return (
@@ -169,6 +172,7 @@ function SplitNode({
           touchesTopEdge={touchesTopEdge}
           touchesRightEdge={isHorizontal ? false : touchesRightEdge}
           touchesLeftEdge={touchesLeftEdge}
+          swapSidebarSides={swapSidebarSides}
           isTabDragActive={isTabDragActive}
           activeDropGroupId={activeDropGroupId}
           activeDropZone={activeDropZone}
@@ -190,6 +194,7 @@ function SplitNode({
           touchesTopEdge={isHorizontal ? touchesTopEdge : false}
           touchesRightEdge={touchesRightEdge}
           touchesLeftEdge={isHorizontal ? false : touchesLeftEdge}
+          swapSidebarSides={swapSidebarSides}
           isTabDragActive={isTabDragActive}
           activeDropGroupId={activeDropGroupId}
           activeDropZone={activeDropZone}
@@ -213,6 +218,7 @@ export default function TabGroupSplitLayout({
 }): React.JSX.Element {
   const dragSplit = useTabDragSplit({ worktreeId, enabled: isWorktreeActive })
   const hasSplits = layout.type === 'split'
+  const swapSidebarSides = useAppStore((s) => s.settings?.swapSidebarSides === true)
 
   return (
     <DndContext
@@ -260,6 +266,7 @@ export default function TabGroupSplitLayout({
             touchesTopEdge={true}
             touchesRightEdge={true}
             touchesLeftEdge={true}
+            swapSidebarSides={swapSidebarSides}
             isTabDragActive={dragSplit.activeDrag !== null}
             activeDropGroupId={dragSplit.hoveredDropTarget?.groupId ?? null}
             activeDropZone={dragSplit.hoveredDropTarget?.zone ?? null}

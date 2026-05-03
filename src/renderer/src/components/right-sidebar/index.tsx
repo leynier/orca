@@ -35,6 +35,12 @@ const ABSOLUTE_FALLBACK_MAX_WIDTH = 2000
 
 const ACTIVITY_BAR_SIDE_WIDTH = 40
 
+// Why: when the sidebar reserves the macOS traffic-light pad on its left, the
+// activity-bar icons share the remaining space with the close button. Bumping
+// the minimum width by this much keeps every icon visible at the smallest
+// drag width without clipping the title/icons under the dots.
+const MIN_WIDTH_TRAFFIC_LIGHT_BUMP = 56
+
 function branchDisplayName(branch: string): string {
   return branch.replace(/^refs\/heads\//, '')
 }
@@ -110,15 +116,14 @@ type RightSidebarProps = {
   side?: 'left' | 'right'
   /** When true the sidebar is anchored at top:0 of the window on the side
    *  where macOS draws its traffic lights, so the internal header reserves
-   *  an 80px pad on the left to keep the activity-bar icons clear of the
-   *  dots. Width matches the global `.titlebar-traffic-light-pad`
-   *  (calc(80px / var(--ui-zoom-factor, 1))) so it scales with UI zoom. */
+   *  the `--titlebar-traffic-light-pad-width` zone on the left to keep the
+   *  activity-bar icons clear of the dots. */
   reserveTrafficLightPad?: boolean
 }
 
-// Why: keep in sync with the `.titlebar-traffic-light-pad` rule in
-// src/renderer/src/assets/main.css so the reserved area scales with UI zoom.
-const TRAFFIC_LIGHT_PAD_WIDTH = 'calc(80px / var(--ui-zoom-factor, 1))'
+// Why: matches the global `.titlebar-traffic-light-pad` rule so the reserved
+// area scales with UI zoom (defined in src/renderer/src/assets/main.css).
+const TRAFFIC_LIGHT_PAD_WIDTH = 'var(--titlebar-traffic-light-pad-width)'
 
 function RightSidebarInner({
   side = 'right',
@@ -227,13 +232,7 @@ function RightSidebarInner({
 
   const activityBarSideWidth = activityBarPosition === 'side' ? ACTIVITY_BAR_SIDE_WIDTH : 0
   const maxWidth = useWindowAwareMaxWidth()
-  // Why: when the sidebar reserves the macOS traffic-light pad on its left,
-  // the activity-bar icons live in the remaining space — so the minimum
-  // width has to grow enough to keep them visible. Bump by 56px:
-  // halfway between the full pad-vs-default differential (72px) and the
-  // tighter +40px we tried, which clipped icons earlier than the user
-  // wanted to be able to drag.
-  const minWidth = MIN_WIDTH + (reserveTrafficLightPad ? 56 : 0)
+  const minWidth = MIN_WIDTH + (reserveTrafficLightPad ? MIN_WIDTH_TRAFFIC_LIGHT_BUMP : 0)
   const { containerRef, onResizeStart } = useSidebarResize<HTMLDivElement>({
     isOpen: rightSidebarOpen,
     width: rightSidebarWidth,

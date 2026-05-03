@@ -1,5 +1,12 @@
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 
+/** CSS custom property the worktree sidebar's resize hook writes its live drag
+ *  width to. Sibling DOM that lives outside the resized container — like the
+ *  worktree cluster painted in a full-width titlebar above the sidebar — reads
+ *  this var so it can track the in-flight width without waiting for React
+ *  state to settle on mouseup. */
+export const WORKTREE_SIDEBAR_LIVE_WIDTH_VAR = '--worktree-sidebar-live-width'
+
 type UseSidebarResizeOptions = {
   isOpen: boolean
   width: number
@@ -8,12 +15,9 @@ type UseSidebarResizeOptions = {
   deltaSign: 1 | -1
   renderedExtraWidth?: number
   setWidth: (width: number) => void
-  /** Optional CSS custom property name (e.g. '--worktree-sidebar-live-width')
-   *  the hook will write the live drag width to on document.documentElement.
-   *  Lets sibling DOM that lives outside the resized container — like a
-   *  cluster painted in a full-width titlebar above the sidebar — track
-   *  the in-flight width without waiting for the React state to settle on
-   *  mouseup. The variable is removed when the drag ends. */
+  /** When set, the hook writes the live drag width to this CSS custom property
+   *  on document.documentElement and clears it on mouseup. See
+   *  WORKTREE_SIDEBAR_LIVE_WIDTH_VAR for the canonical name and rationale. */
   liveWidthCssVar?: string
 }
 

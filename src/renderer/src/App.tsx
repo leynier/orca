@@ -33,6 +33,7 @@ import {
   setRuntimeGraphSyncEnabled
 } from './runtime/sync-runtime-graph'
 import { useGlobalFileDrop } from './hooks/useGlobalFileDrop'
+import { WORKTREE_SIDEBAR_LIVE_WIDTH_VAR } from './hooks/useSidebarResize'
 import { registerUpdaterBeforeUnloadBypass } from './lib/updater-beforeunload'
 import { buildWorkspaceSessionPayload } from './lib/workspace-session'
 import { countWorkingAgents, getWorkingAgentsPerWorktree } from './lib/agent-status'
@@ -1140,7 +1141,7 @@ function App(): React.JSX.Element {
                       // following the resize handle.
                       width:
                         showSidebar && sidebarOpen
-                          ? `var(--worktree-sidebar-live-width, ${sidebarWidth}px)`
+                          ? `var(${WORKTREE_SIDEBAR_LIVE_WIDTH_VAR}, ${sidebarWidth}px)`
                           : undefined
                     }}
                   >
@@ -1154,7 +1155,7 @@ function App(): React.JSX.Element {
                     style={{
                       width:
                         showSidebar && sidebarOpen
-                          ? `var(--worktree-sidebar-live-width, ${sidebarWidth}px)`
+                          ? `var(${WORKTREE_SIDEBAR_LIVE_WIDTH_VAR}, ${sidebarWidth}px)`
                           : undefined
                     }}
                   >

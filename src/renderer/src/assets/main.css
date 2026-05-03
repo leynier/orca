@@ -346,8 +346,12 @@
   user-select: none;
 }
 
+:root {
+  --titlebar-traffic-light-pad-width: calc(80px / var(--ui-zoom-factor, 1));
+}
+
 .titlebar-traffic-light-pad {
-  width: calc(80px / var(--ui-zoom-factor, 1));
+  width: var(--titlebar-traffic-light-pad-width);
   flex-shrink: 0;
 }
 

@@ -1,7 +1,7 @@
 import React, { useEffect } from 'react'
 import { useAppStore } from '@/store'
 import { TooltipProvider } from '@/components/ui/tooltip'
-import { useSidebarResize } from '@/hooks/useSidebarResize'
+import { useSidebarResize, WORKTREE_SIDEBAR_LIVE_WIDTH_VAR } from '@/hooks/useSidebarResize'
 import SidebarHeader from './SidebarHeader'
 import SidebarNav from './SidebarNav'
 import WorktreeList from './WorktreeList'
@@ -52,7 +52,7 @@ function Sidebar({ side = 'left' }: SidebarProps): React.JSX.Element {
     // store. Mirror the drag width through this CSS var so the cluster
     // (and the back/forward arrows inside it) tracks the sidebar's live
     // width during the drag instead of snapping into place on mouseup.
-    liveWidthCssVar: '--worktree-sidebar-live-width'
+    liveWidthCssVar: WORKTREE_SIDEBAR_LIVE_WIDTH_VAR
   })
 
   return (
