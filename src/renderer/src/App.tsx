@@ -1007,7 +1007,13 @@ function App(): React.JSX.Element {
             // mouseup. In workspace view, size this header from the
             // wrapper's live width so it tracks those in-flight resizes
             // instead of leaving a stale-width gap until the drag ends.
-            width: sidebarOpen ? '100%' : undefined
+            width: sidebarOpen ? '100%' : undefined,
+            // Why: when the worktree sidebar is docked right, the panel
+            // content below (Sidebar) paints its own inner-edge border —
+            // this header sits above it and needs the same border so the
+            // 1px seam is continuous from the top of the window down.
+            borderLeft:
+              worktreeSidebarSide === 'right' ? '1px solid var(--sidebar-border)' : undefined
           }}
         >
           {swapSidebarSides ? worktreeClusterRightPositioned : worktreeClusterLeftPositioned}
