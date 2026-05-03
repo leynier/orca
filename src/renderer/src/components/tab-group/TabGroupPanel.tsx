@@ -182,8 +182,13 @@ export default function TabGroupPanel({
     />
   )
 
+  // Why: the tab strip is h-[32px] with border-b border-border, so the
+  // 31px content area sits 1px above the visual bottom of the row. A
+  // strictly centered 28px button (top=1.5, bottom=29.5) reads as low
+  // because the border widens the apparent row 1px past the button.
+  // Nudge up by 1px with -mt-px so the icon sits at the optical centre.
   const menuButtonClassName =
-    'my-auto flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-accent/50 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent'
+    '-mt-px my-auto flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-accent/50 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent'
   const actionChromeClassName = `flex shrink-0 items-center overflow-hidden transition-[width,margin,opacity] duration-150 ${
     isFocused
       ? 'ml-1.5 w-7 pointer-events-auto opacity-100'
