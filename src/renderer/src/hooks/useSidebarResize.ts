@@ -8,6 +8,13 @@ type UseSidebarResizeOptions = {
   deltaSign: 1 | -1
   renderedExtraWidth?: number
   setWidth: (width: number) => void
+  /** Optional CSS custom property name (e.g. '--worktree-sidebar-live-width')
+   *  the hook will write the live drag width to on document.documentElement.
+   *  Lets sibling DOM that lives outside the resized container — like a
+   *  cluster painted in a full-width titlebar above the sidebar — track
+   *  the in-flight width without waiting for the React state to settle on
+   *  mouseup. The variable is removed when the drag ends. */
+  liveWidthCssVar?: string
 }
 
 type UseSidebarResizeResult<T extends HTMLElement> = {
@@ -54,7 +61,8 @@ export function useSidebarResize<T extends HTMLElement>({
   maxWidth,
   deltaSign,
   renderedExtraWidth = 0,
-  setWidth
+  setWidth,
+  liveWidthCssVar
 }: UseSidebarResizeOptions): UseSidebarResizeResult<T> {
   const containerRef = useRef<T | null>(null)
   const isResizingRef = useRef(false)
@@ -91,8 +99,11 @@ export function useSidebarResize<T extends HTMLElement>({
       // snap the DOM width back to the last persisted store value and make the
       // handle feel like it is lagging behind the pointer.
       container.style.width = getRenderedSidebarWidthCssValue(isOpen, nextWidth, renderedExtraWidth)
+      if (liveWidthCssVar) {
+        document.documentElement.style.setProperty(liveWidthCssVar, `${nextWidth}px`)
+      }
     },
-    [isOpen, renderedExtraWidth]
+    [isOpen, liveWidthCssVar, renderedExtraWidth]
   )
 
   useLayoutEffect(() => {
@@ -121,10 +132,18 @@ export function useSidebarResize<T extends HTMLElement>({
 
     const finalWidth = draftWidthRef.current
     applyRenderedWidth(finalWidth)
+    if (liveWidthCssVar) {
+      // Why: clear the live var on drop so React state takes over again.
+      // Leaving it set would keep the sibling DOM pinned to the last drag
+      // value even after the store updates with the same number — and an
+      // unrelated render that only changed `sidebarWidth` (e.g. via a
+      // settings change) would no longer flow through.
+      document.documentElement.style.removeProperty(liveWidthCssVar)
+    }
     if (finalWidth !== width) {
       setWidth(finalWidth)
     }
-  }, [applyRenderedWidth, resetDocumentStyles, setWidth, width])
+  }, [applyRenderedWidth, liveWidthCssVar, resetDocumentStyles, setWidth, width])
 
   const handleMouseMove = useCallback(
     (event: MouseEvent) => {

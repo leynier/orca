@@ -46,7 +46,13 @@ function Sidebar({ side = 'left' }: SidebarProps): React.JSX.Element {
     // Why: when docked left, dragging right grows the sidebar (deltaSign 1);
     // when docked right, dragging left grows it (deltaSign -1).
     deltaSign: side === 'left' ? 1 : -1,
-    setWidth: setSidebarWidth
+    setWidth: setSidebarWidth,
+    // Why: in non-workspace + swap=on the worktree cluster lives in the
+    // full-width titlebar above the sidebar, sized statically from the
+    // store. Mirror the drag width through this CSS var so the cluster
+    // (and the back/forward arrows inside it) tracks the sidebar's live
+    // width during the drag instead of snapping into place on mouseup.
+    liveWidthCssVar: '--worktree-sidebar-live-width'
   })
 
   return (

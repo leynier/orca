@@ -1131,7 +1131,18 @@ function App(): React.JSX.Element {
                   )}
                   <div
                     className={`flex items-center shrink-0${showSidebar && sidebarOpen ? ' overflow-hidden' : ' ml-2'}`}
-                    style={{ width: showSidebar && sidebarOpen ? sidebarWidth : undefined }}
+                    style={{
+                      // Why: --worktree-sidebar-live-width tracks the
+                      // sidebar's in-flight drag width and falls back to
+                      // the persisted sidebarWidth when no drag is active.
+                      // Without it the back/forward arrows inside the
+                      // cluster snap into place only on mouseup instead of
+                      // following the resize handle.
+                      width:
+                        showSidebar && sidebarOpen
+                          ? `var(--worktree-sidebar-live-width, ${sidebarWidth}px)`
+                          : undefined
+                    }}
                   >
                     {worktreeClusterRightPositioned}
                   </div>
@@ -1140,7 +1151,12 @@ function App(): React.JSX.Element {
                 <>
                   <div
                     className={`flex items-center${showSidebar && sidebarOpen ? ' overflow-hidden shrink-0' : ' shrink-0 mr-2'}`}
-                    style={{ width: showSidebar && sidebarOpen ? sidebarWidth : undefined }}
+                    style={{
+                      width:
+                        showSidebar && sidebarOpen
+                          ? `var(--worktree-sidebar-live-width, ${sidebarWidth}px)`
+                          : undefined
+                    }}
                   >
                     {worktreeClusterLeftPositioned}
                   </div>
