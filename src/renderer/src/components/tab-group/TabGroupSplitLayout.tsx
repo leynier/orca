@@ -112,11 +112,12 @@ function SplitNode({
   hoveredTabInsertion: HoveredTabInsertion | null
 }): React.JSX.Element {
   const setTabGroupSplitRatio = useAppStore((state) => state.setTabGroupSplitRatio)
-  // Why: when the user opts into 'swapSidebarSides', App.tsx renders a
-  // full-width titlebar instead of the floating sidebar/explorer toggles
-  // that overlap the tab strip's top corners. Skip both reservations in
-  // that mode so the tab strip doesn't carve out empty space for
-  // affordances that no longer hover over it.
+  // Why: when the user opts into 'swapSidebarSides', the floating activity
+  // toggle moves from the right edge of the tab strip to the left edge,
+  // and the collapsed worktree-sidebar header moves from the left edge to
+  // the right edge. Mirror the reservation flags so each spacer keeps
+  // representing the same logical affordance regardless of physical side;
+  // TabGroupPanel decides which DOM position to render them on.
   const swapSidebarSides = useAppStore((s) => s.settings?.swapSidebarSides === true)
 
   if (node.type === 'leaf') {
@@ -133,8 +134,13 @@ function SplitNode({
         hasSplitGroups={hasSplitGroups}
         touchesRightEdge={touchesRightEdge}
         touchesLeftEdge={touchesLeftEdge}
-        reserveClosedExplorerToggleSpace={touchesTopEdge && touchesRightEdge && !swapSidebarSides}
-        reserveCollapsedSidebarHeaderSpace={touchesTopEdge && touchesLeftEdge && !swapSidebarSides}
+        reserveClosedExplorerToggleSpace={
+          touchesTopEdge && (swapSidebarSides ? touchesLeftEdge : touchesRightEdge)
+        }
+        reserveCollapsedSidebarHeaderSpace={
+          touchesTopEdge && (swapSidebarSides ? touchesRightEdge : touchesLeftEdge)
+        }
+        swapSidebarSides={swapSidebarSides}
         isTabDragActive={isTabDragActive}
         activeDropZone={activeDropGroupId === node.groupId ? activeDropZone : null}
         hoveredTabInsertion={

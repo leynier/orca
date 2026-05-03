@@ -32,6 +32,7 @@ export default function TabGroupPanel({
   touchesLeftEdge,
   reserveClosedExplorerToggleSpace,
   reserveCollapsedSidebarHeaderSpace,
+  swapSidebarSides = false,
   isTabDragActive = false,
   activeDropZone = null,
   hoveredTabInsertion = null
@@ -45,6 +46,10 @@ export default function TabGroupPanel({
   touchesLeftEdge: boolean
   reserveClosedExplorerToggleSpace: boolean
   reserveCollapsedSidebarHeaderSpace: boolean
+  /** When true the floating activity-toggle anchors to the LEFT edge of
+   *  the tab strip and the collapsed worktree-sidebar header anchors to
+   *  the RIGHT edge — mirrored from the default. */
+  swapSidebarSides?: boolean
   isTabDragActive?: boolean
   activeDropZone?: TabDropZone | null
   hoveredTabInsertion?: HoveredTabInsertion | null
@@ -230,17 +235,35 @@ export default function TabGroupPanel({
       >
         <div className="flex h-full items-stretch pr-1.5">
           {/* Why: Electron's native drag hit-test only respects no-drag on DOM
-              descendants, not z-index siblings. When the left sidebar is
+              descendants, not z-index siblings. When the worktree sidebar is
               collapsed, its header floats absolutely (z-10) over this tab row
               from a separate DOM branch. An explicit no-drag spacer here
               punches a hole in the drag surface so the floating sidebar toggle
-              and other titlebar controls remain clickable. */}
-          {reserveCollapsedSidebarHeaderSpace && !sidebarOpen ? (
+              and other titlebar controls remain clickable. The spacer flips
+              edges with the swap setting: it sits before the tabs in default
+              mode and after them when swap=on (so it aligns with the worktree
+              sidebar's collapsed header on the right edge). The closed-
+              explorer-toggle spacer mirrors the same way. When swap=on the
+              floating bar at the left edge of the tab strip carries the
+              activity-toggle plus the macOS traffic-light pad, so its width
+              expands by 80px on macOS. */}
+          {reserveCollapsedSidebarHeaderSpace && !sidebarOpen && !swapSidebarSides ? (
             <div
               className="shrink-0"
               style={
                 {
                   width: 'var(--collapsed-sidebar-header-width)',
+                  WebkitAppRegion: 'no-drag'
+                } as React.CSSProperties
+              }
+            />
+          ) : null}
+          {reserveClosedExplorerToggleSpace && !rightSidebarOpen && swapSidebarSides ? (
+            <div
+              className="shrink-0"
+              style={
+                {
+                  width: 'calc(80px / var(--ui-zoom-factor, 1) + 40px)',
                   WebkitAppRegion: 'no-drag'
                 } as React.CSSProperties
               }
@@ -323,14 +346,26 @@ export default function TabGroupPanel({
           </div>
           {/* Why: Electron's native drag hit-test ignores z-index — a no-drag
               element only overrides drag when it's a DOM descendant, not a
-              sibling in another branch. The floating right-sidebar toggle in
-              App.tsx sits in a separate DOM tree, so we need an explicit
-              no-drag child here to punch a hole in the drag surface beneath it
-              and let clicks through to the toggle. */}
-          {reserveClosedExplorerToggleSpace && !rightSidebarOpen ? (
+              sibling in another branch. The floating activity-sidebar toggle
+              and the worktree-sidebar's collapsed header in App.tsx sit in
+              separate DOM trees, so we need explicit no-drag children here
+              to punch holes in the drag surface beneath them and let clicks
+              through. */}
+          {reserveClosedExplorerToggleSpace && !rightSidebarOpen && !swapSidebarSides ? (
             <div
               className="shrink-0 w-10"
               style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
+            />
+          ) : null}
+          {reserveCollapsedSidebarHeaderSpace && !sidebarOpen && swapSidebarSides ? (
+            <div
+              className="shrink-0"
+              style={
+                {
+                  width: 'var(--collapsed-sidebar-header-width)',
+                  WebkitAppRegion: 'no-drag'
+                } as React.CSSProperties
+              }
             />
           ) : null}
         </div>
