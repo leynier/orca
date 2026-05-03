@@ -1038,18 +1038,11 @@ function App(): React.JSX.Element {
   // elsewhere).
   const reserveActivitySidebarTrafficLightPad =
     activitySidebarSide === 'left' && isMac && !isFullScreen
-  // Why: in workspace mode the activity sidebar's internal header sits
-  // beside the 32px tab strip, so collapse it to that height to keep the
-  // bottom-border line continuous across columns. In landing/settings/
-  // tasks views the full-width titlebar is 42px tall, so the sidebar
-  // header keeps the legacy 42px to align with it.
-  const activitySidebarCompactHeader = workspaceActive
   const activitySidebarSlot = showRightSidebarControls ? (
     <RightSidebar
       key="activity-sidebar"
       side={activitySidebarSide}
       reserveTrafficLightPad={reserveActivitySidebarTrafficLightPad}
-      compactHeader={activitySidebarCompactHeader}
     />
   ) : null
 
