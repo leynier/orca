@@ -1018,16 +1018,17 @@ function App(): React.JSX.Element {
       watchers + cached directory trees survive across open/close toggles.
       Unmount on the tasks view since that surface is intentionally
       distraction-free. */
-  // Why: when the activity sidebar is docked left on macOS (non-fullscreen)
-  // it sits flush against the traffic-light corner, so it must reserve the
-  // 80px pad inside its own header for the icons to clear the dots.
-  const reserveActivitySidebarTrafficLightPad =
+  // Why: when the activity sidebar lives on the same edge as the macOS
+  // traffic lights (left edge, non-fullscreen) the dots draw on top of the
+  // sidebar's header. The sidebar then has to reserve the 80px pad inside
+  // its own header for the icons to clear the dots.
+  const activitySidebarHugsTrafficLightCorner =
     activitySidebarSide === 'left' && isMac && !isFullScreen
   const activitySidebarSlot = showRightSidebarControls ? (
     <RightSidebar
       key="activity-sidebar"
       side={activitySidebarSide}
-      reserveTrafficLightPad={reserveActivitySidebarTrafficLightPad}
+      reserveTrafficLightPad={activitySidebarHugsTrafficLightCorner}
     />
   ) : null
 
