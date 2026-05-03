@@ -229,11 +229,12 @@ function RightSidebarInner({
   const maxWidth = useWindowAwareMaxWidth()
   // Why: when the sidebar reserves the macOS traffic-light pad on its left,
   // the activity-bar icons live in the remaining space — so the minimum
-  // width has to grow to keep the rightmost icons (e.g. Checks) visible.
-  // Bump by the differential between the pad (80px) and the regular pl-2
-  // padding (8px) the icons would otherwise sit behind, not the full pad
-  // width — the original 220px already accounted for the small padding.
-  const minWidth = MIN_WIDTH + (reserveTrafficLightPad ? 72 : 0)
+  // width has to grow enough to keep them visible. Bump by roughly half
+  // the pad differential: the pad is 80px and the regular pl-2 padding
+  // is 8px, but the activity bar fits with a tighter right margin than
+  // the original 220px assumed, so a smaller bump still keeps the icons
+  // on screen and lets the user shrink the column further than +72px.
+  const minWidth = MIN_WIDTH + (reserveTrafficLightPad ? 40 : 0)
   const { containerRef, onResizeStart } = useSidebarResize<HTMLDivElement>({
     isOpen: rightSidebarOpen,
     width: rightSidebarWidth,
