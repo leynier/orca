@@ -227,10 +227,15 @@ function RightSidebarInner({
 
   const activityBarSideWidth = activityBarPosition === 'side' ? ACTIVITY_BAR_SIDE_WIDTH : 0
   const maxWidth = useWindowAwareMaxWidth()
+  // Why: when the sidebar reserves the macOS traffic-light pad on its left,
+  // the activity-bar icons live in the remaining space — so the minimum
+  // width has to grow by the pad width or the user can drag the resize
+  // handle far enough to clip the rightmost icons (e.g. Checks).
+  const minWidth = MIN_WIDTH + (reserveTrafficLightPad ? 80 : 0)
   const { containerRef, onResizeStart } = useSidebarResize<HTMLDivElement>({
     isOpen: rightSidebarOpen,
     width: rightSidebarWidth,
-    minWidth: MIN_WIDTH,
+    minWidth,
     maxWidth,
     // Why: when docked right, dragging left grows the sidebar (deltaSign -1);
     // when docked left, dragging right grows it (deltaSign 1). The hook
