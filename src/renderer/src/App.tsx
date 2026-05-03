@@ -1208,9 +1208,15 @@ function App(): React.JSX.Element {
               {swapSidebarSides ? activitySidebarSlot : null}
               <div className="flex flex-col flex-1 min-w-0 min-h-0">
                 {titlebarElement}
+                {/* Why: worktree-sidebar position inside the wrapper mirrors
+                    with the swap flag — when swap=off it sits left of the
+                    center column, when swap=on it sits right. The titlebar's
+                    sidebar-width cluster (above the worktree sidebar) and
+                    the sidebar itself stay vertically aligned in both cases. */}
                 <div className="flex flex-row flex-1 min-h-0 overflow-hidden">
-                  {worktreeSidebarSlot}
+                  {!swapSidebarSides ? worktreeSidebarSlot : null}
                   {centerColumn}
+                  {swapSidebarSides ? worktreeSidebarSlot : null}
                 </div>
               </div>
               {!swapSidebarSides ? activitySidebarSlot : null}
