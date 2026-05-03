@@ -108,9 +108,22 @@ type RightSidebarProps = {
    *  'side' strip orientation and the toggle icon, so the activity panel
    *  can render on either window edge when the user swaps sidebar sides. */
   side?: 'left' | 'right'
+  /** When true the sidebar is anchored at top:0 of the window on the side
+   *  where macOS draws its traffic lights, so the internal header reserves
+   *  an 80px pad on the left to keep the activity-bar icons clear of the
+   *  dots. Width matches the global `.titlebar-traffic-light-pad`
+   *  (calc(80px / var(--ui-zoom-factor, 1))) so it scales with UI zoom. */
+  reserveTrafficLightPad?: boolean
 }
 
-function RightSidebarInner({ side = 'right' }: RightSidebarProps): React.JSX.Element {
+// Why: keep in sync with the `.titlebar-traffic-light-pad` rule in
+// src/renderer/src/assets/main.css so the reserved area scales with UI zoom.
+const TRAFFIC_LIGHT_PAD_WIDTH = 'calc(80px / var(--ui-zoom-factor, 1))'
+
+function RightSidebarInner({
+  side = 'right',
+  reserveTrafficLightPad = false
+}: RightSidebarProps): React.JSX.Element {
   const activeWorktree = useActiveWorktree()
   const rightSidebarOpen = useAppStore((s) => s.rightSidebarOpen)
   const rightSidebarWidth = useAppStore((s) => s.rightSidebarWidth)
@@ -323,7 +336,15 @@ function RightSidebarInner({ side = 'right' }: RightSidebarProps): React.JSX.Ele
           /* ── Top activity bar: horizontal icon row ── */
           <ContextMenu>
             <ContextMenuTrigger asChild>
-              <div className="flex items-center justify-between border-b border-border h-[42px] min-h-[42px] pl-2 pr-1">
+              <div
+                className={cn(
+                  'flex items-center justify-between border-b border-border h-[42px] min-h-[42px] pr-1',
+                  reserveTrafficLightPad ? '' : 'pl-2'
+                )}
+                style={
+                  reserveTrafficLightPad ? { paddingLeft: TRAFFIC_LIGHT_PAD_WIDTH } : undefined
+                }
+              >
                 <TooltipProvider delayDuration={400}>
                   <div className="flex items-center">{activityBarIcons}</div>
                   {closeButton}
@@ -337,7 +358,13 @@ function RightSidebarInner({ side = 'right' }: RightSidebarProps): React.JSX.Ele
           </ContextMenu>
         ) : (
           /* ── Side layout: static title header ── */
-          <div className="flex items-center justify-between h-[42px] min-h-[42px] px-3 border-b border-border">
+          <div
+            className={cn(
+              'flex items-center justify-between h-[42px] min-h-[42px] pr-3 border-b border-border',
+              reserveTrafficLightPad ? '' : 'pl-3'
+            )}
+            style={reserveTrafficLightPad ? { paddingLeft: TRAFFIC_LIGHT_PAD_WIDTH } : undefined}
+          >
             <span className="text-[11px] font-semibold uppercase tracking-wider text-foreground">
               {visibleItems.find((item) => item.id === effectiveTab)?.title ?? ''}
             </span>
@@ -366,7 +393,13 @@ function RightSidebarInner({ side = 'right' }: RightSidebarProps): React.JSX.Ele
                 'flex flex-col items-center w-10 min-w-[40px] bg-sidebar border-border',
                 // Why: the strip sits against the outer window edge, so its
                 // border faces the panel — flipped with the dock side.
-                side === 'right' ? 'border-l' : 'border-r'
+                side === 'right' ? 'border-l' : 'border-r',
+                // Why: when the strip hugs the macOS traffic-light corner,
+                // push the first icon below the 42px-tall dot row so the
+                // dots don't draw on top of it. The 'top' header path
+                // doesn't need this because that header itself takes up
+                // the same 42px and reserves the pad horizontally.
+                reserveTrafficLightPad ? 'pt-[42px]' : ''
               )}
             >
               <TooltipProvider delayDuration={400}>{activityBarIcons}</TooltipProvider>

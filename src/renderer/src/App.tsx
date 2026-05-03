@@ -1030,8 +1030,19 @@ function App(): React.JSX.Element {
       watchers + cached directory trees survive across open/close toggles.
       Unmount on the tasks view since that surface is intentionally
       distraction-free. */
+  // Why: when the activity sidebar is docked left it sits flush against
+  // the macOS traffic-light corner. Tell RightSidebar to reserve the same
+  // 80px pad inside its own header so the icons clear the dots — only on
+  // macOS in non-fullscreen (matching the rule that drives trafficLightPad
+  // elsewhere).
+  const reserveActivitySidebarTrafficLightPad =
+    activitySidebarSide === 'left' && isMac && !isFullScreen
   const activitySidebarSlot = showRightSidebarControls ? (
-    <RightSidebar key="activity-sidebar" side={activitySidebarSide} />
+    <RightSidebar
+      key="activity-sidebar"
+      side={activitySidebarSide}
+      reserveTrafficLightPad={reserveActivitySidebarTrafficLightPad}
+    />
   ) : null
 
   useEffect(() => {
@@ -1067,24 +1078,29 @@ function App(): React.JSX.Element {
             window — the worktree-sidebar's own 42px header carries the
             macOS traffic lights and left controls. Settings, landing,
             tasks and any view with sidebars swapped keep a full-width
-            titlebar so macOS dots stay anchored to the top-left of the
-            window regardless of where the worktree sidebar lives. The
-            titlebar's right-sidebar toggle is gated on !rightSidebarOpen
-            (closes #1354) so it doesn't double-render alongside the
-            close button inside the activity sidebar's own header. */}
+            titlebar inside the wrapper so the activity sidebar (lifted
+            to be a sibling) can anchor its own header at top:0 of the
+            window — matching workspace-view alignment (closes #1354).
+            In swap=on the activity sidebar reserves a traffic-light pad
+            inside its own header so macOS dots clear the activity-bar
+            icons; when the activity sidebar is closed (width 0) the
+            titlebar's left cluster takes over the pad reservation and
+            hosts the toggle so the user can reopen the panel. The two
+            slots carry stable keys ('worktree-sidebar' /
+            'activity-sidebar') so React preserves component identity
+            when positions swap. */}
         {(() => {
           const titlebarElement =
             !workspaceActive || swapSidebarSides ? (
               <div className="titlebar">
                 {swapSidebarSides ? (
                   <>
-                    <div
-                      className={`flex items-center shrink-0${rightSidebarOpen ? ' overflow-hidden' : ' mr-2'}`}
-                      style={{ width: rightSidebarOpen ? rightSidebarWidth : undefined }}
-                    >
-                      {trafficLightPad}
-                      {!rightSidebarOpen && rightSidebarToggle}
-                    </div>
+                    {!rightSidebarOpen && (
+                      <div className="flex items-center shrink-0 mr-2">
+                        {trafficLightPad}
+                        {rightSidebarToggle}
+                      </div>
+                    )}
                     <div
                       id="titlebar-tabs"
                       className={`flex flex-1 min-w-0 self-stretch${activeView !== 'terminal' || !activeWorktreeId ? ' invisible pointer-events-none' : ''}`}
@@ -1187,32 +1203,9 @@ function App(): React.JSX.Element {
             </div>
           )
 
-          // Why: when sidebars are swapped we keep the full-width titlebar
-          // anchored to the top of the window (above every column). When
-          // they are not swapped we lift the activity sidebar (right) to
-          // be a sibling of the titlebar+center wrapper so its own header
-          // anchors at the top of the window in landing/settings/tasks
-          // views — matching workspace-view alignment (closes #1354).
-          // Doing the same lift in swap=on would put the activity panel
-          // (now on the left) at top:0 where macOS draws its traffic
-          // lights, causing the dots to overlap the activity-bar icons.
-          // The two slots carry stable keys ('worktree-sidebar' /
-          // 'activity-sidebar') so React preserves component identity
-          // when positions swap.
-          if (swapSidebarSides) {
-            return (
-              <>
-                {titlebarElement}
-                <div className="flex flex-row flex-1 min-h-0 overflow-hidden">
-                  {activitySidebarSlot}
-                  {centerColumn}
-                  {worktreeSidebarSlot}
-                </div>
-              </>
-            )
-          }
           return (
             <div className="flex flex-row flex-1 min-h-0 overflow-hidden">
+              {swapSidebarSides ? activitySidebarSlot : null}
               <div className="flex flex-col flex-1 min-w-0 min-h-0">
                 {titlebarElement}
                 <div className="flex flex-row flex-1 min-h-0 overflow-hidden">
@@ -1220,7 +1213,7 @@ function App(): React.JSX.Element {
                   {centerColumn}
                 </div>
               </div>
-              {activitySidebarSlot}
+              {!swapSidebarSides ? activitySidebarSlot : null}
             </div>
           )
         })()}
