@@ -913,35 +913,31 @@ function App(): React.JSX.Element {
     ) : null
 
   // Why: the cluster mirrors with the worktree sidebar's dock side so the
-  // toggle stays adjacent to the sidebar it controls. Pad lives in the
-  // left-positioned variant only — when swapped, it migrates to the
-  // activity cluster on the opposite edge.
+  // toggle stays adjacent to the sidebar it controls. Pad lives only when
+  // not swapped — when swapped, it migrates to the activity cluster on
+  // the opposite edge. `flex-row-reverse` on outer + inner flips the
+  // visual order without disturbing DOM (a11y traversal stays stable),
+  // and the nav-arrows auto-margin flips with it so the arrows always
+  // sit on the inner edge.
   // Why ref on the outer container: TabGroupPanel reads its width to size
   // the sidebar-collapse spacer. Measuring just the inner control cluster
   // would let the nav arrows overhang the first tab once the sidebar
   // collapses, producing a half-occluded, non-scrollable tab strip.
-  const worktreeClusterLeftPositioned = (
-    <div ref={titlebarLeftControlsRef} className="flex h-full w-full shrink-0 items-center">
-      <div className="flex h-full items-center">
-        {trafficLightPad}
+  const worktreeCluster = (
+    <div
+      ref={titlebarLeftControlsRef}
+      className={`flex h-full w-full shrink-0 items-center${swapSidebarSides ? ' flex-row-reverse' : ''}`}
+    >
+      <div className={`flex h-full items-center${swapSidebarSides ? ' flex-row-reverse' : ''}`}>
+        {!swapSidebarSides ? trafficLightPad : null}
         {worktreeSidebarToggleButton}
         {agentBadgePopover}
       </div>
       {navArrowsCluster ? (
-        <div className="ml-auto mr-3 flex items-center">{navArrowsCluster}</div>
+        <div className={`flex items-center ${swapSidebarSides ? 'ml-3 mr-auto' : 'ml-auto mr-3'}`}>
+          {navArrowsCluster}
+        </div>
       ) : null}
-    </div>
-  )
-
-  const worktreeClusterRightPositioned = (
-    <div ref={titlebarLeftControlsRef} className="flex h-full w-full shrink-0 items-center">
-      {navArrowsCluster ? (
-        <div className="ml-3 mr-auto flex items-center">{navArrowsCluster}</div>
-      ) : null}
-      <div className="flex h-full items-center">
-        {agentBadgePopover}
-        {worktreeSidebarToggleButton}
-      </div>
     </div>
   )
 
@@ -1001,7 +997,7 @@ function App(): React.JSX.Element {
               worktreeSidebarSide === 'right' ? '1px solid var(--sidebar-border)' : undefined
           }}
         >
-          {swapSidebarSides ? worktreeClusterRightPositioned : worktreeClusterLeftPositioned}
+          {worktreeCluster}
         </div>
         <div className="flex min-h-0 flex-1">
           {/* Why: the workspace-view wrapper adds a fixed 42px header
@@ -1089,7 +1085,7 @@ function App(): React.JSX.Element {
                   : undefined
             }}
           >
-            {worktreeClusterRightPositioned}
+            {worktreeCluster}
           </div>
         </>
       ) : (
@@ -1103,7 +1099,7 @@ function App(): React.JSX.Element {
                   : undefined
             }}
           >
-            {worktreeClusterLeftPositioned}
+            {worktreeCluster}
           </div>
           <div
             id="titlebar-tabs"
