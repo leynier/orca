@@ -1182,7 +1182,7 @@ function App(): React.JSX.Element {
               {workspaceActive && !rightSidebarOpen && (
                 <div
                   className={`absolute top-0 z-10 flex items-center h-[42px] ${
-                    swapSidebarSides ? 'left-0' : 'right-0'
+                    swapSidebarSides ? 'left-0 border-r border-sidebar-border' : 'right-0'
                   }`}
                   style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
                 >
