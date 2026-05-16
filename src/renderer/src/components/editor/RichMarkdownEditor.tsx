@@ -5,11 +5,13 @@ import type { Editor } from '@tiptap/react'
 import type { MarkdownDocument } from '../../../../shared/types'
 import { RichMarkdownSlashMenu } from './RichMarkdownSlashMenu'
 import { RichMarkdownDocLinkMenu } from './RichMarkdownDocLinkMenu'
+import { RichMarkdownEmojiMenu } from './RichMarkdownEmojiMenu'
 import { useAppStore } from '@/store'
 import { RichMarkdownToolbar } from './RichMarkdownToolbar'
 import { encodeRawMarkdownHtmlForRichEditor } from './raw-markdown-html'
 import { useLocalImagePick } from './useLocalImagePick'
 import { createRichMarkdownExtensions } from './rich-markdown-extensions'
+import { getConnectionId } from '@/lib/connection-context'
 import { slashCommands, syncDocLinkMenu, syncSlashMenu } from './rich-markdown-commands'
 import type {
   DocLinkMenuRow,
@@ -34,24 +36,36 @@ import { normalizeSoftBreaks } from './rich-markdown-normalize'
 import { autoFocusRichEditor } from './rich-markdown-auto-focus'
 import { handleRichMarkdownCut } from './rich-markdown-cut-handler'
 import { openHttpLink } from '@/lib/http-link-routing'
+import { isLocalPathOpenBlocked, showLocalPathOpenBlockedToast } from '@/lib/local-path-open-guard'
 import { toast } from 'sonner'
+import { settingsForRuntimeOwner } from '@/runtime/runtime-rpc-client'
+import { isSingleEmptyTopLevelOrderedList } from './rich-markdown-list-continuation'
 import {
   absolutePathToFileUri as toFileUrlForOsEscape,
   resolveMarkdownLinkTarget
 } from './markdown-internal-links'
 import { scrollToAnchorInEditor } from './markdown-anchor-scroll'
+import type {
+  RichMarkdownContextMenuCommand,
+  RichMarkdownContextMenuCommandPayload
+} from '../../../../shared/rich-markdown-context-menu'
+import { buildMarkdownTableOfContents, type MarkdownTocItem } from './markdown-table-of-contents'
+import { MarkdownTableOfContentsPanel } from './MarkdownTableOfContentsPanel'
 
 type RichMarkdownEditorProps = {
   fileId: string
   content: string
   filePath: string
   worktreeId: string
+  runtimeEnvironmentId?: string | null
   scrollCacheKey: string
   onContentChange: (content: string) => void
   onDirtyStateHint: (dirty: boolean) => void
   onSave: (content: string) => void
   onOpenDocLink?: (target: string) => void
   markdownDocuments?: MarkdownDocument[]
+  showTableOfContents?: boolean
+  onCloseTableOfContents?: () => void
   // Why: front-matter is stripped from the rich editor's content but we still
   // want it visible to the user. It renders between the toolbar and the editor
   // surface so the formatting toolbar stays at the top of the pane.
@@ -62,20 +76,115 @@ const richMarkdownExtensions = createRichMarkdownExtensions({
   includePlaceholder: true
 })
 
+function runRichMarkdownContextCommand(
+  command: RichMarkdownContextMenuCommand,
+  editor: Editor,
+  toggleLink: () => void,
+  pickImage: () => void
+): void {
+  switch (command) {
+    case 'add-link':
+      toggleLink()
+      return
+    case 'bold':
+      editor.chain().focus().toggleBold().run()
+      return
+    case 'italic':
+      editor.chain().focus().toggleItalic().run()
+      return
+    case 'strike':
+      editor.chain().focus().toggleStrike().run()
+      return
+    case 'inline-code':
+      editor.chain().focus().toggleCode().run()
+      return
+    case 'code-block':
+      editor.chain().focus().toggleCodeBlock().run()
+      return
+    case 'blockquote':
+      editor.chain().focus().toggleBlockquote().run()
+      return
+    case 'paragraph':
+      editor.chain().focus().setParagraph().run()
+      return
+    case 'heading-1':
+      editor.chain().focus().setHeading({ level: 1 }).run()
+      return
+    case 'heading-2':
+      editor.chain().focus().setHeading({ level: 2 }).run()
+      return
+    case 'heading-3':
+      editor.chain().focus().setHeading({ level: 3 }).run()
+      return
+    case 'bullet-list':
+      editor.chain().focus().toggleBulletList().run()
+      return
+    case 'ordered-list':
+      editor.chain().focus().toggleOrderedList().run()
+      return
+    case 'task-list':
+      editor.chain().focus().toggleTaskList().run()
+      return
+    case 'image':
+      pickImage()
+      return
+    case 'divider':
+      editor.chain().focus().setHorizontalRule().run()
+  }
+}
+
+function shouldFocusEmptyEditorFromSurfaceClick(
+  event: React.MouseEvent<HTMLDivElement>,
+  editor: Editor | null
+): boolean {
+  if (!editor?.isEmpty || event.button !== 0) {
+    return false
+  }
+  const target = event.target
+  if (!(target instanceof Element)) {
+    return false
+  }
+  return !target.closest('.rich-markdown-editor-shell button, .rich-markdown-editor-shell input')
+}
+
+function isRichMarkdownContextCommandTarget(
+  payload: RichMarkdownContextMenuCommandPayload,
+  root: HTMLElement | null
+): boolean {
+  if (!root) {
+    return false
+  }
+  const rect = root.getBoundingClientRect()
+  return (
+    payload.x >= rect.left &&
+    payload.x <= rect.right &&
+    payload.y >= rect.top &&
+    payload.y <= rect.bottom
+  )
+}
+
+function flattenMarkdownTocItems(items: MarkdownTocItem[]): MarkdownTocItem[] {
+  return items.flatMap((item) => [item, ...flattenMarkdownTocItems(item.children)])
+}
+
 export default function RichMarkdownEditor({
   fileId,
   content,
   filePath,
   worktreeId,
+  runtimeEnvironmentId,
   scrollCacheKey,
   onContentChange,
   onDirtyStateHint,
   onSave,
   onOpenDocLink,
   markdownDocuments,
+  showTableOfContents = false,
+  onCloseTableOfContents,
   headerSlot
 }: RichMarkdownEditorProps): React.JSX.Element {
   const rootRef = useRef<HTMLDivElement | null>(null)
+  const settings = useAppStore((s) => s.settings)
   const editorFontZoomLevel = useAppStore((s) => s.editorFontZoomLevel)
   const activateMarkdownLink = useAppStore((s) => s.activateMarkdownLink)
   const worktreeRoot = useAppStore((s) => {
@@ -91,6 +200,7 @@ export default function RichMarkdownEditor({
   const [slashMenu, setSlashMenu] = useState<SlashMenuState | null>(null)
   const [selectedCommandIndex, setSelectedCommandIndex] = useState(0)
   const [docLinkMenu, setDocLinkMenu] = useState<DocLinkMenuState | null>(null)
+  const [emojiMenu, setEmojiMenu] = useState<{ left: number; top: number } | null>(null)
   const [selectedDocLinkIndex, setSelectedDocLinkIndex] = useState(0)
   const isMac = navigator.userAgent.includes('Mac')
   const lastCommittedMarkdownRef = useRef(content)
@@ -105,6 +215,7 @@ export default function RichMarkdownEditor({
   const onSaveRef = useRef(onSave)
   const onOpenDocLinkRef = useRef(onOpenDocLink)
   const handleLocalImagePickRef = useRef<() => void>(() => {})
+  const handleEmojiPickRef = useRef<(menu: SlashMenuState) => void>(() => {})
   const openSearchRef = useRef<() => void>(() => {})
   // Why: ProseMirror keeps the initial handleKeyDown closure, so `editor` stays
   // stuck at the first-render null value unless we read the live instance here.
@@ -122,6 +233,12 @@ export default function RichMarkdownEditor({
   const [linkBubble, setLinkBubble] = useState<LinkBubbleState | null>(null)
   const [isEditingLink, setIsEditingLink] = useState(false)
   const isEditingLinkRef = useRef(false)
+  const typedEmptyOrderedListMarkerRef = useRef(false)
+  const tableOfContentsItems = useMemo(() => buildMarkdownTableOfContents(content), [content])
+  const flatTableOfContentsItems = useMemo(
+    () => flattenMarkdownTocItems(tableOfContentsItems),
+    [tableOfContentsItems]
+  )
 
   // Why: assigning callback refs during render keeps them current before any
   // ProseMirror handler reads them, avoiding the one-render stale window that
@@ -164,10 +281,23 @@ export default function RichMarkdownEditor({
     contentType: 'markdown',
     editorProps: {
       attributes: {
-        class: 'rich-markdown-editor'
+        class: 'rich-markdown-editor',
+        spellcheck: 'true'
       },
       handleDOMEvents: {
         cut: handleRichMarkdownCut
+      },
+      handleTextInput: (view, from, to, text) => {
+        typedEmptyOrderedListMarkerRef.current = false
+        if (text !== ' ' || from !== to || !view.state.selection.empty) {
+          return false
+        }
+        const { $from } = view.state.selection
+        const beforeCursor = $from.parent.textBetween(0, $from.parentOffset, '\0', '\0')
+        // Why: only a typed ordered-list shortcut should preserve `1.` on
+        // Enter; toolbar/slash/context-created empty lists should exit normally.
+        typedEmptyOrderedListMarkerRef.current = /^\d+\.$/.test(beforeCursor)
+        return false
       },
       handleKeyDown: createRichMarkdownKeyHandler({
         isMac,
@@ -184,6 +314,8 @@ export default function RichMarkdownEditor({
         filteredDocLinkRowsRef,
         selectedDocLinkIndexRef,
         handleLocalImagePickRef,
+        handleEmojiPickRef,
+        typedEmptyOrderedListMarkerRef,
         flushPendingSerialization,
         openSearchRef,
         setIsEditingLink,
@@ -210,6 +342,19 @@ export default function RichMarkdownEditor({
         // Why: doc links are atom nodes (not marks), so resolve(pos).marks()
         // won't find them. Check nodeAt(pos) first for doc link navigation.
         const clickedNode = view.state.doc.nodeAt(pos)
+        if (clickedNode?.type.name === 'image') {
+          const src = (clickedNode.attrs.src as string | undefined) ?? ''
+          if (!src) {
+            return false
+          }
+          void activateMarkdownLink(src, {
+            sourceFilePath: filePath,
+            worktreeId,
+            worktreeRoot,
+            runtimeEnvironmentId
+          })
+          return true
+        }
         if (clickedNode?.type.name === 'markdownDocLink') {
           const target = clickedNode.attrs.target as string
           if (target && onOpenDocLinkRef.current) {
@@ -236,7 +381,20 @@ export default function RichMarkdownEditor({
           }
           if (classified.kind === 'external') {
             openHttpLink(classified.url, { forceSystemBrowser: true })
-          } else if (classified.kind === 'markdown') {
+            return true
+          }
+          if (
+            isLocalPathOpenBlocked(
+              settingsForRuntimeOwner(useAppStore.getState().settings, runtimeEnvironmentId),
+              { connectionId: getConnectionId(worktreeId) }
+            )
+          ) {
+            // Why: Shift-click opens through the client OS. Server-local paths
+            // from remote runtime/SSH worktrees are not meaningful on this client.
+            showLocalPathOpenBlockedToast()
+            return true
+          }
+          if (classified.kind === 'markdown') {
             void window.api.shell.pathExists(classified.absolutePath).then((exists) => {
               if (!exists) {
                 toast.error(`File not found: ${classified.relativePath}`)
@@ -249,7 +407,12 @@ export default function RichMarkdownEditor({
           }
           return true
         }
-        void activateMarkdownLink(href, { sourceFilePath: filePath, worktreeId, worktreeRoot })
+        void activateMarkdownLink(href, {
+          sourceFilePath: filePath,
+          worktreeId,
+          worktreeRoot,
+          runtimeEnvironmentId
+        })
         return true
       }
     },
@@ -285,6 +448,9 @@ export default function RichMarkdownEditor({
     onUpdate: ({ editor: nextEditor }) => {
       syncSlashMenu(nextEditor, rootRef.current, setSlashMenu)
       syncDocLinkMenu(nextEditor, rootRef.current, setDocLinkMenu)
+      if (!isSingleEmptyTopLevelOrderedList(nextEditor)) {
+        typedEmptyOrderedListMarkerRef.current = false
+      }
 
       // Why: bail out during normalizeSoftBreaks's onCreate transaction so the
       // structural housekeeping doesn't mark the file dirty before the user
@@ -360,22 +526,30 @@ export default function RichMarkdownEditor({
 
   useModifierHeldClass(rootRef, isMac)
 
-  // Why: the custom Image extension reads filePath from editor.storage to resolve
-  // relative image src values to file:// URLs for display. After updating the
-  // stored path we dispatch a no-op transaction so ProseMirror re-renders image
-  // nodes with the new resolved src (renderHTML reads storage at render time).
+  // Why: the custom Image extension reads filePath/runtimeContext from storage
+  // to resolve relative image src values. After updating storage we dispatch a
+  // no-op transaction so ProseMirror re-renders image nodes with the new source.
   useEffect(() => {
     if (editor) {
       isApplyingProgrammaticUpdateRef.current = true
       try {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         ;(editor.storage as any).image.filePath = filePath
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        ;(editor.storage as any).image.runtimeContext = worktreeRoot
+          ? {
+              settings: settingsForRuntimeOwner(settings, runtimeEnvironmentId),
+              worktreeId,
+              worktreePath: worktreeRoot,
+              connectionId: getConnectionId(worktreeId)
+            }
+          : undefined
         editor.view.dispatch(editor.state.tr)
       } finally {
         isApplyingProgrammaticUpdateRef.current = false
       }
     }
-  }, [editor, filePath])
+  }, [editor, filePath, runtimeEnvironmentId, settings, worktreeId, worktreeRoot])
 
   // Why: the doc link NodeView reads the document list from storage to style
   // resolved vs. missing links. The no-op transaction with meta flag triggers
@@ -394,7 +568,7 @@ export default function RichMarkdownEditor({
     }
   }, [editor, markdownDocuments])
 
-  const handleLocalImagePick = useLocalImagePick(editor, filePath)
+  const handleLocalImagePick = useLocalImagePick(editor, filePath, worktreeId, runtimeEnvironmentId)
 
   useEffect(() => {
     handleLocalImagePickRef.current = handleLocalImagePick
@@ -409,8 +583,25 @@ export default function RichMarkdownEditor({
   } = useLinkBubble(editor, rootRef, linkBubble, setLinkBubble, setIsEditingLink, {
     sourceFilePath: filePath,
     worktreeId,
-    worktreeRoot
+    worktreeRoot,
+    runtimeEnvironmentId
   })
+
+  useEffect(() => {
+    return window.api.ui.onRichMarkdownContextCommand((payload) => {
+      const ed = editorRef.current
+      if (!ed || !isRichMarkdownContextCommandTarget(payload, rootRef.current)) {
+        return
+      }
+
+      runRichMarkdownContextCommand(
+        payload.command,
+        ed,
+        toggleLinkFromToolbar,
+        handleLocalImagePick
+      )
+    })
+  }, [handleLocalImagePick, toggleLinkFromToolbar])
 
   const {
     activeMatchIndex,
@@ -432,6 +623,34 @@ export default function RichMarkdownEditor({
     openSearchRef.current = openSearch
   }, [openSearch])
 
+  const navigateToTableOfContentsItem = useCallback(
+    (id: string): void => {
+      const target = flatTableOfContentsItems.find((item) => item.id === id)
+      const container = scrollContainerRef.current
+      if (!target || !container) {
+        return
+      }
+      const sameTitleIndex = flatTableOfContentsItems
+        .filter((item) => item.title === target.title)
+        .findIndex((item) => item.id === target.id)
+      const matchingHeadings = Array.from(
+        container.querySelectorAll<HTMLElement>('h1, h2, h3')
+      ).filter((candidate) => candidate.textContent?.trim() === target.title)
+      const heading = matchingHeadings.at(Math.max(0, sameTitleIndex))
+      heading?.scrollIntoView({ block: 'center' })
+    },
+    [flatTableOfContentsItems]
+  )
+
+  const openEmojiMenu = useCallback((menu: SlashMenuState): void => {
+    setSlashMenu(null)
+    setEmojiMenu({ left: menu.left, top: menu.top })
+  }, [])
+
+  useEffect(() => {
+    handleEmojiPickRef.current = openEmojiMenu
+  }, [openEmojiMenu])
+
   const filteredSlashCommands = useMemo(() => {
     const query = slashMenu?.query.trim().toLowerCase() ?? ''
     if (!query) {
@@ -452,6 +671,9 @@ export default function RichMarkdownEditor({
   useEffect(() => {
     selectedCommandIndexRef.current = selectedCommandIndex
   }, [selectedCommandIndex])
+  useEffect(() => {
+    setSelectedCommandIndex(0)
+  }, [slashMenu?.query])
   useEffect(() => {
     if (filteredSlashCommands.length === 0) {
       setSelectedCommandIndex(0)
@@ -578,62 +800,93 @@ export default function RichMarkdownEditor({
   }, [content, editor, fileId])
 
   return (
-    <div
-      ref={rootRef}
-      className="rich-markdown-editor-shell"
-      style={{ '--editor-font-zoom-level': editorFontZoomLevel } as React.CSSProperties}
-    >
-      <RichMarkdownToolbar
-        editor={editor}
-        onToggleLink={toggleLinkFromToolbar}
-        onImagePick={handleLocalImagePick}
-      />
-      {headerSlot}
-      {/* Why: wrap scroll area + search bar in a relative container so the
-          search bar overlays the content (Monaco-style) instead of occupying
-          layout space and shifting the document down when opened. */}
-      <div className="relative min-h-0 flex-1">
-        <div ref={scrollContainerRef} className="h-full overflow-auto scrollbar-editor">
-          <EditorContent editor={editor} />
-        </div>
-        <RichMarkdownSearchBar
-          activeMatchIndex={activeMatchIndex}
-          isOpen={isSearchOpen}
-          matchCount={matchCount}
-          onClose={closeSearch}
-          onMoveToMatch={moveToMatch}
-          onQueryChange={setSearchQuery}
-          query={searchQuery}
-          searchInputRef={searchInputRef}
-        />
-      </div>
-      {linkBubble ? (
-        <RichMarkdownLinkBubble
-          linkBubble={linkBubble}
-          isEditing={isEditingLink}
-          onSave={handleLinkSave}
-          onRemove={handleLinkRemove}
-          onEditStart={() => setIsEditingLink(true)}
-          onEditCancel={handleLinkEditCancel}
-          onOpen={handleLinkOpen}
-        />
-      ) : null}
-      {slashMenu && filteredSlashCommands.length > 0 ? (
-        <RichMarkdownSlashMenu
+    <div className="rich-markdown-editor-layout">
+      <div
+        ref={rootRef}
+        className="rich-markdown-editor-shell"
+        style={{ '--editor-font-zoom-level': editorFontZoomLevel } as React.CSSProperties}
+      >
+        <RichMarkdownToolbar
           editor={editor}
-          slashMenu={slashMenu}
-          filteredCommands={filteredSlashCommands}
-          selectedIndex={selectedCommandIndex}
+          onToggleLink={toggleLinkFromToolbar}
           onImagePick={handleLocalImagePick}
         />
-      ) : null}
-      {docLinkMenu ? (
-        <RichMarkdownDocLinkMenu
-          editor={editor}
-          menu={docLinkMenu}
-          rows={docLinkRows}
-          totalMatches={docLinkTotalMatches}
-          selectedIndex={selectedDocLinkIndex}
+        {headerSlot}
+        {/* Why: wrap scroll area + search bar in a relative container so the
+          search bar overlays the content (Monaco-style) instead of occupying
+          layout space and shifting the document down when opened. */}
+        <div className="relative min-h-0 flex-1">
+          <div
+            ref={scrollContainerRef}
+            className="h-full overflow-auto scrollbar-editor"
+            onMouseDown={(event) => {
+              if (!shouldFocusEmptyEditorFromSurfaceClick(event, editorRef.current)) {
+                return
+              }
+              // Why: native contenteditable only places the caret on actual line
+              // boxes; an empty note should still focus when the user clicks any
+              // blank part of the document surface.
+              event.preventDefault()
+              editorRef.current?.commands.focus('start')
+            }}
+          >
+            <EditorContent editor={editor} />
+          </div>
+          <RichMarkdownSearchBar
+            activeMatchIndex={activeMatchIndex}
+            isOpen={isSearchOpen}
+            matchCount={matchCount}
+            onClose={closeSearch}
+            onMoveToMatch={moveToMatch}
+            onQueryChange={setSearchQuery}
+            query={searchQuery}
+            searchInputRef={searchInputRef}
+          />
+        </div>
+        {linkBubble ? (
+          <RichMarkdownLinkBubble
+            linkBubble={linkBubble}
+            isEditing={isEditingLink}
+            onSave={handleLinkSave}
+            onRemove={handleLinkRemove}
+            onEditStart={() => setIsEditingLink(true)}
+            onEditCancel={handleLinkEditCancel}
+            onOpen={handleLinkOpen}
+          />
+        ) : null}
+        {slashMenu && filteredSlashCommands.length > 0 ? (
+          <RichMarkdownSlashMenu
+            editor={editor}
+            slashMenu={slashMenu}
+            filteredCommands={filteredSlashCommands}
+            selectedIndex={selectedCommandIndex}
+            onImagePick={handleLocalImagePick}
+            onEmojiPick={() => openEmojiMenu(slashMenu)}
+          />
+        ) : null}
+        {emojiMenu ? (
+          <RichMarkdownEmojiMenu
+            editor={editor}
+            left={emojiMenu.left}
+            top={emojiMenu.top}
+            onClose={() => setEmojiMenu(null)}
+          />
+        ) : null}
+        {docLinkMenu ? (
+          <RichMarkdownDocLinkMenu
+            editor={editor}
+            menu={docLinkMenu}
+            rows={docLinkRows}
+            totalMatches={docLinkTotalMatches}
+            selectedIndex={selectedDocLinkIndex}
+          />
+        ) : null}
+      </div>
+      {showTableOfContents ? (
+        <MarkdownTableOfContentsPanel
+          items={tableOfContentsItems}
+          onClose={onCloseTableOfContents ?? (() => {})}
+          onNavigate={navigateToTableOfContentsItem}
         />
       ) : null}
     </div>

@@ -4,11 +4,17 @@ import type {
   GitStatusResult,
   GitDiffResult,
   GitBranchCompareResult,
+  GitCommitCompareResult,
   GitConflictOperation,
+  GitPushTarget,
+  GitUpstreamStatus,
   GitWorktreeInfo,
   SearchOptions,
   SearchResult
 } from '../../shared/types'
+import type { GitHistoryOptions, GitHistoryResult } from '../../shared/git-history'
+import type { CommitMessageDraftContext } from '../../shared/commit-message-generation'
+import type { WorkspaceSpaceDirectoryScanResult } from '../../shared/workspace-space-types'
 
 // ─── PTY Provider ───────────────────────────────────────────────────
 
@@ -30,6 +36,12 @@ export type PtySpawnOptions = {
    *  changing the user's persistent default shell setting. Only consulted on
    *  Windows; ignored on macOS/Linux where shell selection is not exposed. */
   shellOverride?: string
+  /** Why: PowerShell is the top-level shell family in product terms, but on
+   *  Windows we may need to choose between inbox Windows PowerShell 5.1 and
+   *  pwsh.exe at spawn time. Threading the persisted implementation choice
+   *  through spawn options keeps local PTY and daemon PTY semantics aligned
+   *  without promoting pwsh into a separate shell family. */
+  terminalWindowsPowerShellImplementation?: 'auto' | 'powershell.exe' | 'pwsh.exe'
 }
 
 export type PtySpawnResult = {
@@ -73,7 +85,7 @@ export type IPtyProvider = {
   attach(id: string): Promise<void>
   write(id: string, data: string): void
   resize(id: string, cols: number, rows: number): void
-  shutdown(id: string, immediate: boolean): Promise<void>
+  shutdown(id: string, opts: { immediate?: boolean; keepHistory?: boolean }): Promise<void>
   sendSignal(id: string, signal: string): Promise<void>
   getCwd(id: string): Promise<string>
   getInitialCwd(id: string): Promise<string>
@@ -110,41 +122,66 @@ export type IFilesystemProvider = {
   readDir(dirPath: string): Promise<DirEntry[]>
   readFile(filePath: string): Promise<FileReadResult>
   writeFile(filePath: string, content: string): Promise<void>
+  writeFileBase64(filePath: string, contentBase64: string): Promise<void>
+  writeFileBase64Chunk(filePath: string, contentBase64: string, append: boolean): Promise<void>
   stat(filePath: string): Promise<FileStat>
   deletePath(targetPath: string, recursive?: boolean): Promise<void>
   createFile(filePath: string): Promise<void>
   createDir(dirPath: string): Promise<void>
+  createDirNoClobber(dirPath: string): Promise<void>
   rename(oldPath: string, newPath: string): Promise<void>
   copy(source: string, destination: string): Promise<void>
   realpath(filePath: string): Promise<string>
   search(opts: SearchOptions): Promise<SearchResult>
   listFiles(rootPath: string, options?: { excludePaths?: string[] }): Promise<string[]>
+  scanWorkspaceSpace?(
+    rootPath: string,
+    options?: { signal?: AbortSignal }
+  ): Promise<WorkspaceSpaceDirectoryScanResult>
   watch(rootPath: string, callback: (events: FsChangeEvent[]) => void): Promise<() => void>
 }
 
 // ─── Git Provider ───────────────────────────────────────────────────
 
 export type IGitProvider = {
-  getStatus(worktreePath: string): Promise<GitStatusResult>
-  getDiff(worktreePath: string, filePath: string, staged: boolean): Promise<GitDiffResult>
+  getStatus(worktreePath: string, options?: { includeIgnored?: boolean }): Promise<GitStatusResult>
+  getHistory(worktreePath: string, options?: GitHistoryOptions): Promise<GitHistoryResult>
+  commit(worktreePath: string, message: string): Promise<{ success: boolean; error?: string }>
+  getStagedCommitContext(worktreePath: string): Promise<CommitMessageDraftContext | null>
+  getDiff(
+    worktreePath: string,
+    filePath: string,
+    staged: boolean,
+    compareAgainstHead?: boolean
+  ): Promise<GitDiffResult>
   stageFile(worktreePath: string, filePath: string): Promise<void>
   unstageFile(worktreePath: string, filePath: string): Promise<void>
   bulkStageFiles(worktreePath: string, filePaths: string[]): Promise<void>
   bulkUnstageFiles(worktreePath: string, filePaths: string[]): Promise<void>
   discardChanges(worktreePath: string, filePath: string): Promise<void>
+  bulkDiscardChanges(worktreePath: string, filePaths: string[]): Promise<void>
   detectConflictOperation(worktreePath: string): Promise<GitConflictOperation>
   getBranchCompare(worktreePath: string, baseRef: string): Promise<GitBranchCompareResult>
+  getCommitCompare(worktreePath: string, commitId: string): Promise<GitCommitCompareResult>
+  getUpstreamStatus(worktreePath: string): Promise<GitUpstreamStatus>
+  pushBranch(worktreePath: string, publish?: boolean, pushTarget?: GitPushTarget): Promise<void>
+  pullBranch(worktreePath: string): Promise<void>
+  fetchRemote(worktreePath: string): Promise<void>
   getBranchDiff(
     worktreePath: string,
     baseRef: string,
     options?: { includePatch?: boolean; filePath?: string; oldPath?: string }
   ): Promise<GitDiffResult[]>
-  listWorktrees(repoPath: string): Promise<GitWorktreeInfo[]>
+  getCommitDiff(
+    worktreePath: string,
+    args: { commitOid: string; parentOid?: string | null; filePath: string; oldPath?: string }
+  ): Promise<GitDiffResult>
+  listWorktrees(repoPath: string, options?: { signal?: AbortSignal }): Promise<GitWorktreeInfo[]>
   addWorktree(
     repoPath: string,
     branchName: string,
     targetDir: string,
-    options?: { base?: string; track?: boolean }
+    options?: { base?: string }
   ): Promise<void>
   removeWorktree(worktreePath: string, force?: boolean): Promise<void>
   isGitRepo(path: string): boolean

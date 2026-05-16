@@ -1,6 +1,18 @@
 ---
 name: orca-cli
-description: Use the Orca CLI to orchestrate worktrees, live terminals, and browser automation through a running Orca editor. Use when an agent needs to create, inspect, update, or remove Orca worktrees; inspect repo state known to Orca; read, send to, wait on, or stop Orca-managed terminals; or automate the built-in browser (navigate, snapshot, click, fill, screenshot). Coding agents should also keep the current worktree comment updated with the latest meaningful work-in-progress checkpoint whenever useful. Triggers include "use orca cli", "manage Orca worktrees", "read Orca terminal", "reply to Claude Code in Orca", "create a worktree in Orca", "update Orca worktree comment", "click on", "fill the form", "take a screenshot", "navigate to", "interact with the page", "snapshot the page", or any task where the agent should operate through Orca.
+description: >-
+  Use the `orca` CLI to drive a running Orca editor — manage Orca worktrees;
+  create, read, and run shell commands in Orca-managed terminals; and automate
+  Orca's built-in browser (snapshot/click/fill/screenshot/tabs). Use this
+  instead of raw `git worktree`, ad hoc shell PTYs, or Playwright whenever the
+  task touches Orca state. Coding agents inside an Orca worktree should also use
+  it to keep the worktree comment fresh at meaningful checkpoints. Boundary with
+  `orchestration`: if the recipient of a terminal write is another AI agent
+  (Claude Code, Gemini, Codex, a worker), use `orchestration` — it is the only
+  correct way to send messages, nudges, replies, or task hand-offs to agents.
+  orca-cli writes are for non-agent terminals (shells, build/test commands);
+  reading or `wait`ing on any terminal — including agent terminals — stays in
+  orca-cli.
 ---
 
 # Orca CLI
@@ -13,7 +25,7 @@ Use `orca` for:
 
 - worktree orchestration inside a running Orca app
 - updating the current worktree comment with meaningful progress checkpoints
-- reading and replying to Orca-managed terminals
+- reading Orca-managed terminals and sending input to non-agent terminals
 - stopping or waiting on Orca-managed terminals
 - accessing repos known to Orca
 Do not use `orca` when plain shell tools are simpler and Orca state does not matter.
@@ -22,7 +34,7 @@ Examples:
 
 - creating one Orca worktree per GitHub issue
 - updating the current worktree comment after a significant checkpoint, such as reproducing a bug, validating a fix, or handing off for review
-- finding the Claude Code terminal for a worktree and replying to it
+- finding the Claude Code terminal for a worktree and reading its status
 - checking which Orca worktrees have live terminal activity
 
 ## Preconditions
@@ -178,7 +190,7 @@ Why: `--direction horizontal` splits the pane **left and right** (new pane appea
 - Use `terminal read` before `terminal send` unless the next input is obvious.
 - Use `terminal wait --terminal <handle> --for exit` only when the task actually depends on process completion.
 - Use `terminal wait --terminal <handle> --for tui-idle` to wait for an agent CLI (Claude Code, Gemini, Codex, etc.) to finish its current task. This detects the working→idle OSC title transition. Always pass `--timeout-ms` as a safety net — unsupported CLIs will hang until timeout.
-- Use `terminal create` to spin up new terminal tabs programmatically, optionally with a `--command` for startup (e.g. `--command "claude"` to launch Claude Code) and `--title` for labeling. After creating a `--command` terminal, use `terminal wait --for tui-idle` to wait for the agent to boot before dispatching.
+- Use `terminal create` to spin up new terminal tabs programmatically, optionally with a `--command` for startup (e.g. `--command "claude"` to launch Claude Code) and `--title` for labeling. In local Orca sessions, `--command "codex"` is routed through Orca's visible terminal path automatically so Codex does not start as a headless/background PTY. After creating a `--command` terminal, use `terminal wait --for tui-idle` to wait for the agent to boot before dispatching.
 - Use `terminal split` to create split panes within an existing terminal tab. Pass `--command` to run a command in the new pane.
 - Prefer Orca worktree selectors over hardcoded paths when Orca identity already exists.
 - If the user asks for CLI UX feedback, test the public `orca` command first. Only inspect `src/cli` or use `node out/cli/index.js` if the public command is missing or the task is explicitly about implementation internals.

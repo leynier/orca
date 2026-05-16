@@ -23,6 +23,7 @@ import SourceControl from './SourceControl'
 import SearchPanel from './Search'
 import ChecksPanel from './ChecksPanel'
 import PortsPanel from './PortsPanel'
+import { GitHubRateLimitCompact } from '@/components/github/github-rate-limit-display'
 
 const MIN_WIDTH = 220
 // Why: long file names (e.g. construction drawing sheets, multi-part document
@@ -229,6 +230,8 @@ function RightSidebarInner({
   const effectiveTab = visibleItems.some((item) => item.id === rightSidebarTab)
     ? rightSidebarTab
     : visibleItems[0].id
+  const showGitHubBudgetInPanel =
+    !isFolder && (effectiveTab === 'source-control' || effectiveTab === 'checks')
 
   const activityBarSideWidth = activityBarPosition === 'side' ? ACTIVITY_BAR_SIDE_WIDTH : 0
   const maxWidth = useWindowAwareMaxWidth()
@@ -380,14 +383,16 @@ function RightSidebarInner({
             <ContextMenuTrigger asChild>
               <div
                 className={cn(
-                  'flex items-center justify-between border-b border-border h-[42px] min-h-[42px] pr-1',
+                  'flex items-center justify-between border-b border-border h-[36px] min-h-[36px] pr-1 right-sidebar-header-inset right-sidebar-header-drag',
                   reserveTrafficLightPad ? '' : 'pl-2'
                 )}
                 style={
                   reserveTrafficLightPad ? { paddingLeft: TRAFFIC_LIGHT_PAD_WIDTH } : undefined
                 }
               >
-                <TooltipProvider delayDuration={400}>{topHeaderRow}</TooltipProvider>
+                <TooltipProvider delayDuration={400}>
+                  <div className="right-sidebar-header-no-drag">{topHeaderRow}</div>
+                </TooltipProvider>
               </div>
             </ContextMenuTrigger>
             <ActivityBarPositionMenu
@@ -399,14 +404,23 @@ function RightSidebarInner({
           /* ── Side layout: static title header ── */
           <div
             className={cn(
-              'flex items-center justify-between h-[42px] min-h-[42px] pr-3 border-b border-border',
+              'flex items-center justify-between h-[36px] min-h-[36px] pr-3 border-b border-border right-sidebar-header-side-inset right-sidebar-header-drag',
               reserveTrafficLightPad ? '' : 'pl-3'
             )}
             style={reserveTrafficLightPad ? { paddingLeft: TRAFFIC_LIGHT_PAD_WIDTH } : undefined}
           >
-            <TooltipProvider delayDuration={400}>{sideHeaderRow}</TooltipProvider>
+            <TooltipProvider delayDuration={400}>
+              <div className="right-sidebar-header-no-drag">{sideHeaderRow}</div>
+            </TooltipProvider>
           </div>
         )}
+
+        {showGitHubBudgetInPanel ? (
+          <GitHubRateLimitCompact
+            className="mx-2 my-1.5 max-w-[calc(100%-1rem)] self-start"
+            label="GitHub API budget for this panel"
+          />
+        ) : null}
 
         {panelContent}
 
@@ -426,16 +440,16 @@ function RightSidebarInner({
           <ContextMenuTrigger asChild>
             <div
               className={cn(
-                'flex flex-col items-center w-10 min-w-[40px] bg-sidebar border-border',
+                'flex flex-col items-center w-10 min-w-[40px] bg-sidebar border-border side-activity-bar-windows-inset',
                 // Why: the strip sits against the outer window edge, so its
                 // border faces the panel — flipped with the dock side.
                 side === 'right' ? 'border-l' : 'border-r',
                 // Why: when the strip hugs the macOS traffic-light corner,
-                // push the first icon below the 42px-tall dot row so the
+                // push the first icon below the 36px-tall dot row so the
                 // dots don't draw on top of it. The 'top' header path
-                // doesn't need this because that header itself takes up
-                // the same 42px and reserves the pad horizontally.
-                reserveTrafficLightPad ? 'pt-[42px]' : ''
+                // doesn't need this because that header reserves the pad
+                // horizontally.
+                reserveTrafficLightPad ? 'pt-[36px]' : ''
               )}
             >
               <TooltipProvider delayDuration={400}>{activityBarIcons}</TooltipProvider>

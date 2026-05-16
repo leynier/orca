@@ -15,6 +15,11 @@ export const GENERAL_WORKSPACE_SEARCH_ENTRIES: SettingsSearchEntry[] = [
     title: 'Skip Delete Worktree Confirmation',
     description: 'Delete worktrees from the context menu without a confirmation dialog.',
     keywords: ['delete', 'worktree', 'confirm', 'dialog', 'skip', 'prompt']
+  },
+  {
+    title: 'Skip Delete Automation Confirmation',
+    description: 'Delete automations without a confirmation dialog.',
+    keywords: ['delete', 'automation', 'confirm', 'dialog', 'skip', 'prompt']
   }
 ]
 
@@ -38,6 +43,11 @@ export const GENERAL_EDITOR_SEARCH_ENTRIES: SettingsSearchEntry[] = [
     title: 'Minimap',
     description: 'Show the minimap overview when editing a file.',
     keywords: ['minimap', 'overview', 'code', 'scroll']
+  },
+  {
+    title: 'Markdown Review Notes',
+    description: 'Show local markdown review note controls and the review panel.',
+    keywords: ['markdown', 'review', 'notes', 'annotations', 'agents']
   }
 ]
 
@@ -83,7 +93,8 @@ export const GENERAL_AGENT_SEARCH_ENTRIES: SettingsSearchEntry[] = [
       'pi',
       'gemini',
       'aider',
-      'copilot'
+      'copilot',
+      'grok'
     ]
   }
 ]

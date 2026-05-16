@@ -1,7 +1,7 @@
 /* eslint-disable max-lines */
 import { ipcMain, shell } from 'electron'
-import { readdir, readFile, writeFile, stat, lstat } from 'fs/promises'
-import { extname } from 'path'
+import { readdir, readFile, writeFile, stat, lstat, open } from 'fs/promises'
+import { extname, join } from 'path'
 import type { ChildProcess } from 'child_process'
 import { wslAwareSpawn } from '../git/runner'
 import { parseWslPath, toWindowsWslPath } from '../wsl'
@@ -9,13 +9,17 @@ import type { Store } from '../persistence'
 import type {
   DirEntry,
   GitBranchCompareResult,
+  GitCommitCompareResult,
   GitConflictOperation,
   GitDiffResult,
+  GitPushTarget,
+  GitUpstreamStatus,
   GitStatusResult,
   MarkdownDocument,
   SearchOptions,
   SearchResult
 } from '../../shared/types'
+import type { GitHistoryOptions, GitHistoryResult } from '../../shared/git-history'
 import {
   buildRgArgs,
   createAccumulator,
@@ -28,22 +32,37 @@ import {
   getStatus,
   detectConflictOperation,
   getDiff,
+  commitChanges,
   stageFile,
   unstageFile,
   bulkStageFiles,
   bulkUnstageFiles,
+  bulkDiscardChanges,
   discardChanges,
+  getStagedCommitContext,
   getBranchCompare,
-  getBranchDiff
+  getBranchDiff,
+  getCommitCompare,
+  getCommitDiff
 } from '../git/status'
+import { getHistory } from '../git/history'
+import {
+  cancelGenerateCommitMessageLocal,
+  generateCommitMessageFromContext,
+  resolveCommitMessageSettings,
+  type GenerateCommitMessageResult
+} from '../text-generation/commit-message-text-generation'
+import { getUpstreamStatus } from '../git/upstream'
+import { gitFetch, gitPull, gitPush } from '../git/remote'
+import { assertGitPushTargetShape } from '../../shared/git-push-target-validation'
+import { validateGitPushTarget } from '../git/push-target-validation'
 import { getRemoteFileUrl } from '../git/repo'
 import {
   resolveAuthorizedPath,
   resolveRegisteredWorktreePath,
   validateGitRelativeFilePath,
   isENOENT,
-  authorizeExternalPath,
-  rebuildAuthorizedRootsCache
+  authorizeExternalPath
 } from './filesystem-auth'
 import { listQuickOpenFiles } from './filesystem-list-files'
 import { registerFilesystemMutationHandlers } from './filesystem-mutations'
@@ -52,8 +71,16 @@ import { listMarkdownDocuments, markdownDocumentsFromRelativePaths } from './mar
 import { checkRgAvailable } from './rg-availability'
 import { getSshFilesystemProvider } from '../providers/ssh-filesystem-dispatch'
 import { getSshGitProvider } from '../providers/ssh-git-dispatch'
+import {
+  prepareLocalCommitMessageAgentEnv,
+  type CommitMessageAgentEnvironmentResolvers
+} from '../text-generation/commit-message-agent-environment'
 
-const MAX_FILE_SIZE = 5 * 1024 * 1024 // 5MB
+// Why: Monaco has large-file optimizations like VS Code; blocking at 5MB makes
+// ordinary JSON/log files inaccessible before the editor can degrade features.
+const MAX_TEXT_FILE_SIZE = 50 * 1024 * 1024 // 50MB
+const BINARY_PROBE_BYTES = 8192
+const FULL_GIT_OBJECT_ID_PATTERN = /^(?:[0-9a-fA-F]{40}|[0-9a-fA-F]{64})$/
 // Why: previewable binaries (PDFs, images) are rendered by the viewer as
 // base64 blobs, not parsed as text — 5MB is tight for real-world PDFs, and
 // raising this cap only affects binary preview, not text/search paths.
@@ -74,6 +101,13 @@ const PREVIEWABLE_BINARY_MIME_TYPES: Record<string, string> = {
   '.pdf': 'application/pdf'
 }
 
+function validateFullGitObjectId(value: string, label: string): string {
+  if (!FULL_GIT_OBJECT_ID_PATTERN.test(value)) {
+    throw new Error(`${label} must be a full git object id`)
+  }
+  return value
+}
+
 /**
  * Check if a buffer appears to be binary (contains null bytes in first 8KB).
  */
@@ -87,8 +121,42 @@ function isBinaryBuffer(buffer: Buffer): boolean {
   return false
 }
 
-export function registerFilesystemHandlers(store: Store): void {
-  void rebuildAuthorizedRootsCache(store)
+async function isBinaryFilePrefix(filePath: string): Promise<boolean> {
+  const handle = await open(filePath, 'r')
+  try {
+    const probe = Buffer.alloc(BINARY_PROBE_BYTES)
+    const { bytesRead } = await handle.read(probe, 0, probe.length, 0)
+    return isBinaryBuffer(probe.subarray(0, bytesRead))
+  } finally {
+    await handle.close()
+  }
+}
+
+async function isDirectoryEntry(
+  dirPath: string,
+  entry: { name: string; isDirectory(): boolean; isSymbolicLink(): boolean },
+  resolveEntryPath: (entryPath: string) => Promise<string>
+): Promise<boolean> {
+  if (entry.isDirectory()) {
+    return true
+  }
+  if (!entry.isSymbolicLink()) {
+    return false
+  }
+  try {
+    // Why: directory symlinks inside a workspace should navigate like folders
+    // without bypassing the local authorized-path boundary.
+    const entryPath = await resolveEntryPath(join(dirPath, entry.name))
+    return (await stat(entryPath)).isDirectory()
+  } catch {
+    return false
+  }
+}
+
+export function registerFilesystemHandlers(
+  store: Store,
+  commitMessageAgentEnv?: CommitMessageAgentEnvironmentResolvers
+): void {
   const activeTextSearches = new Map<string, ChildProcess>()
 
   // ─── Filesystem ─────────────────────────────────────────
@@ -104,18 +172,21 @@ export function registerFilesystemHandlers(store: Store): void {
       }
       const dirPath = await resolveAuthorizedPath(args.dirPath, store)
       const entries = await readdir(dirPath, { withFileTypes: true })
-      return entries
-        .map((entry) => ({
+      const mapped = await Promise.all(
+        entries.map(async (entry) => ({
           name: entry.name,
-          isDirectory: entry.isDirectory(),
+          isDirectory: await isDirectoryEntry(dirPath, entry, (entryPath) =>
+            resolveAuthorizedPath(entryPath, store)
+          ),
           isSymlink: entry.isSymbolicLink()
         }))
-        .sort((a, b) => {
-          if (a.isDirectory !== b.isDirectory) {
-            return a.isDirectory ? -1 : 1
-          }
-          return a.name.localeCompare(b.name)
-        })
+      )
+      return mapped.sort((a, b) => {
+        if (a.isDirectory !== b.isDirectory) {
+          return a.isDirectory ? -1 : 1
+        }
+        return a.name.localeCompare(b.name)
+      })
     }
   )
 
@@ -135,15 +206,15 @@ export function registerFilesystemHandlers(store: Store): void {
       const filePath = await resolveAuthorizedPath(args.filePath, store)
       const stats = await stat(filePath)
       const mimeType = PREVIEWABLE_BINARY_MIME_TYPES[extname(filePath).toLowerCase()]
-      const sizeLimit = mimeType ? MAX_PREVIEWABLE_BINARY_SIZE : MAX_FILE_SIZE
+      const sizeLimit = mimeType ? MAX_PREVIEWABLE_BINARY_SIZE : MAX_TEXT_FILE_SIZE
       if (stats.size > sizeLimit) {
         throw new Error(
           `File too large: ${(stats.size / 1024 / 1024).toFixed(1)}MB exceeds ${sizeLimit / 1024 / 1024}MB limit`
         )
       }
 
-      const buffer = await readFile(filePath)
       if (mimeType) {
+        const buffer = await readFile(filePath)
         return {
           content: buffer.toString('base64'),
           isBinary: true,
@@ -155,6 +226,14 @@ export function registerFilesystemHandlers(store: Store): void {
         }
       }
 
+      // Why: the text cap is intentionally larger than the old binary cap.
+      // Probe unknown large files first so archives do not get fully buffered
+      // just to discover they are not editable text.
+      if (stats.size > BINARY_PROBE_BYTES && (await isBinaryFilePrefix(filePath))) {
+        return { content: '', isBinary: true }
+      }
+
+      const buffer = await readFile(filePath)
       if (isBinaryBuffer(buffer)) {
         return { content: '', isBinary: true }
       }
@@ -418,17 +497,37 @@ export function registerFilesystemHandlers(store: Store): void {
     'git:status',
     async (
       _event,
-      args: { worktreePath: string; connectionId?: string }
+      args: { worktreePath: string; connectionId?: string; includeIgnored?: boolean }
     ): Promise<GitStatusResult> => {
+      const options = { includeIgnored: args.includeIgnored ?? false }
       if (args.connectionId) {
         const provider = getSshGitProvider(args.connectionId)
         if (!provider) {
           throw new Error(`No git provider for connection "${args.connectionId}"`)
         }
-        return provider.getStatus(args.worktreePath)
+        return provider.getStatus(args.worktreePath, options)
       }
       const worktreePath = await resolveRegisteredWorktreePath(args.worktreePath, store)
-      return getStatus(worktreePath)
+      return getStatus(worktreePath, options)
+    }
+  )
+
+  ipcMain.handle(
+    'git:history',
+    async (
+      _event,
+      args: { worktreePath: string; connectionId?: string } & GitHistoryOptions
+    ): Promise<GitHistoryResult> => {
+      const options: GitHistoryOptions = { limit: args.limit, baseRef: args.baseRef }
+      if (args.connectionId) {
+        const provider = getSshGitProvider(args.connectionId)
+        if (!provider) {
+          throw new Error(`No git provider for connection "${args.connectionId}"`)
+        }
+        return provider.getHistory(args.worktreePath, options)
+      }
+      const worktreePath = await resolveRegisteredWorktreePath(args.worktreePath, store)
+      return getHistory(worktreePath, options)
     }
   )
 
@@ -457,18 +556,138 @@ export function registerFilesystemHandlers(store: Store): void {
     'git:diff',
     async (
       _event,
-      args: { worktreePath: string; filePath: string; staged: boolean; connectionId?: string }
+      args: {
+        worktreePath: string
+        filePath: string
+        staged: boolean
+        compareAgainstHead?: boolean
+        connectionId?: string
+      }
     ): Promise<GitDiffResult> => {
       if (args.connectionId) {
         const provider = getSshGitProvider(args.connectionId)
         if (!provider) {
           throw new Error(`No git provider for connection "${args.connectionId}"`)
         }
-        return provider.getDiff(args.worktreePath, args.filePath, args.staged)
+        return provider.getDiff(
+          args.worktreePath,
+          args.filePath,
+          args.staged,
+          args.compareAgainstHead
+        )
       }
       const worktreePath = await resolveRegisteredWorktreePath(args.worktreePath, store)
       const filePath = validateGitRelativeFilePath(worktreePath, args.filePath)
-      return getDiff(worktreePath, filePath, args.staged)
+      return getDiff(worktreePath, filePath, args.staged, args.compareAgainstHead)
+    }
+  )
+
+  ipcMain.handle(
+    'git:commit',
+    async (
+      _event,
+      args: { worktreePath: string; message: string; connectionId?: string }
+    ): Promise<{ success: boolean; error?: string }> => {
+      // Why: validate at the IPC boundary so the renderer gets a clear error instead of an opaque execFile failure.
+      if (typeof args.message !== 'string' || args.message.trim().length === 0) {
+        throw new Error('Commit message is required')
+      }
+      if (args.connectionId) {
+        const provider = getSshGitProvider(args.connectionId)
+        if (!provider) {
+          throw new Error(`No git provider for connection "${args.connectionId}"`)
+        }
+        return provider.commit(args.worktreePath, args.message)
+      }
+      const worktreePath = await resolveRegisteredWorktreePath(args.worktreePath, store)
+      return commitChanges(worktreePath, args.message)
+    }
+  )
+
+  ipcMain.handle(
+    'git:generateCommitMessage',
+    async (
+      _event,
+      args: {
+        worktreePath: string
+        connectionId?: string
+      }
+    ): Promise<GenerateCommitMessageResult> => {
+      const resolvedSettings = resolveCommitMessageSettings(store.getSettings())
+      if (!resolvedSettings.ok) {
+        return { success: false, error: resolvedSettings.error }
+      }
+      if (args.connectionId) {
+        const provider = getSshGitProvider(args.connectionId)
+        if (!provider) {
+          return {
+            success: false,
+            error: `No git provider for connection "${args.connectionId}"`
+          }
+        }
+        let context
+        try {
+          context = await provider.getStagedCommitContext(args.worktreePath)
+        } catch (error) {
+          console.error('[filesystem] Failed to read remote staged commit context:', error)
+          return {
+            success: false,
+            error: 'Failed to read staged changes.'
+          }
+        }
+        if (!context) {
+          return { success: false, error: 'No staged changes to summarize.' }
+        }
+        return generateCommitMessageFromContext(context, resolvedSettings.params, {
+          kind: 'remote',
+          cwd: args.worktreePath,
+          execute: (plan, cwd, timeoutMs) =>
+            provider.executeCommitMessagePlan(plan, cwd, timeoutMs),
+          missingBinaryLocation: 'remote PATH'
+        })
+      }
+      const worktreePath = await resolveRegisteredWorktreePath(args.worktreePath, store)
+      let context
+      try {
+        context = await getStagedCommitContext(worktreePath)
+      } catch (error) {
+        console.error('[filesystem] Failed to read staged commit context:', error)
+        return {
+          success: false,
+          error: 'Failed to read staged changes.'
+        }
+      }
+      if (!context) {
+        return { success: false, error: 'No staged changes to summarize.' }
+      }
+      const localEnv = await prepareLocalCommitMessageAgentEnv(
+        resolvedSettings.params.agentId,
+        commitMessageAgentEnv
+      )
+      if (!localEnv.ok) {
+        return { success: false, error: localEnv.error }
+      }
+      return generateCommitMessageFromContext(context, resolvedSettings.params, {
+        kind: 'local',
+        cwd: worktreePath,
+        ...(localEnv.env ? { env: localEnv.env } : {})
+      })
+    }
+  )
+
+  ipcMain.handle(
+    'git:cancelGenerateCommitMessage',
+    async (_event, args: { worktreePath: string; connectionId?: string }): Promise<void> => {
+      if (args.connectionId) {
+        const provider = getSshGitProvider(args.connectionId)
+        if (!provider) {
+          return
+        }
+        await provider.cancelGenerateCommitMessage(args.worktreePath)
+        return
+      }
+      const worktreePath = await resolveRegisteredWorktreePath(args.worktreePath, store)
+      cancelGenerateCommitMessageLocal(worktreePath)
     }
   )
 
@@ -487,6 +706,106 @@ export function registerFilesystemHandlers(store: Store): void {
       }
       const worktreePath = await resolveRegisteredWorktreePath(args.worktreePath, store)
       return getBranchCompare(worktreePath, args.baseRef)
+    }
+  )
+
+  ipcMain.handle(
+    'git:commitCompare',
+    async (
+      _event,
+      args: { worktreePath: string; commitId: string; connectionId?: string }
+    ): Promise<GitCommitCompareResult> => {
+      const commitId = validateFullGitObjectId(args.commitId, 'commitId')
+      if (args.connectionId) {
+        const provider = getSshGitProvider(args.connectionId)
+        if (!provider) {
+          throw new Error(`No git provider for connection "${args.connectionId}"`)
+        }
+        return provider.getCommitCompare(args.worktreePath, commitId)
+      }
+      const worktreePath = await resolveRegisteredWorktreePath(args.worktreePath, store)
+      return getCommitCompare(worktreePath, commitId)
+    }
+  )
+
+  ipcMain.handle(
+    'git:upstreamStatus',
+    async (
+      _event,
+      args: { worktreePath: string; connectionId?: string }
+    ): Promise<GitUpstreamStatus> => {
+      if (args.connectionId) {
+        const provider = getSshGitProvider(args.connectionId)
+        if (!provider) {
+          throw new Error(`No git provider for connection "${args.connectionId}"`)
+        }
+        return provider.getUpstreamStatus(args.worktreePath)
+      }
+      const worktreePath = await resolveRegisteredWorktreePath(args.worktreePath, store)
+      return getUpstreamStatus(worktreePath)
+    }
+  )
+
+  ipcMain.handle(
+    'git:fetch',
+    async (_event, args: { worktreePath: string; connectionId?: string }): Promise<void> => {
+      if (args.connectionId) {
+        const provider = getSshGitProvider(args.connectionId)
+        if (!provider) {
+          throw new Error(`No git provider for connection "${args.connectionId}"`)
+        }
+        return provider.fetchRemote(args.worktreePath)
+      }
+      const worktreePath = await resolveRegisteredWorktreePath(args.worktreePath, store)
+      await gitFetch(worktreePath)
+    }
+  )
+
+  ipcMain.handle(
+    'git:push',
+    async (
+      _event,
+      args: {
+        worktreePath: string
+        publish?: boolean
+        connectionId?: string
+        pushTarget?: GitPushTarget
+      }
+    ): Promise<void> => {
+      // Why: coerce to strict boolean at the IPC boundary so a malformed
+      // renderer payload (e.g. string 'false') can't silently enable
+      // --set-upstream mode. Mirrors the relay handler in src/relay/git-handler.ts.
+      const publish = args.publish === true
+      if (args.connectionId) {
+        if (args.pushTarget) {
+          assertGitPushTargetShape(args.pushTarget)
+        }
+        const provider = getSshGitProvider(args.connectionId)
+        if (!provider) {
+          throw new Error(`No git provider for connection "${args.connectionId}"`)
+        }
+        return provider.pushBranch(args.worktreePath, publish, args.pushTarget)
+      }
+      const worktreePath = await resolveRegisteredWorktreePath(args.worktreePath, store)
+      if (args.pushTarget) {
+        await validateGitPushTarget(worktreePath, args.pushTarget)
+      }
+      await gitPush(worktreePath, publish, args.pushTarget)
+    }
+  )
+
+  ipcMain.handle(
+    'git:pull',
+    async (_event, args: { worktreePath: string; connectionId?: string }): Promise<void> => {
+      if (args.connectionId) {
+        const provider = getSshGitProvider(args.connectionId)
+        if (!provider) {
+          throw new Error(`No git provider for connection "${args.connectionId}"`)
+        }
+        return provider.pullBranch(args.worktreePath)
+      }
+      const worktreePath = await resolveRegisteredWorktreePath(args.worktreePath, store)
+      await gitPull(worktreePath)
     }
   )
 
@@ -535,6 +854,47 @@ export function registerFilesystemHandlers(store: Store): void {
       return getBranchDiff(worktreePath, {
         mergeBase: args.compare.mergeBase,
         headOid: args.compare.headOid,
+        filePath,
+        oldPath
+      })
+    }
+  )
+
+  ipcMain.handle(
+    'git:commitDiff',
+    async (
+      _event,
+      args: {
+        worktreePath: string
+        commitOid: string
+        parentOid?: string | null
+        filePath: string
+        oldPath?: string
+        connectionId?: string
+      }
+    ): Promise<GitDiffResult> => {
+      const commitOid = validateFullGitObjectId(args.commitOid, 'commitOid')
+      const parentOid = args.parentOid ? validateFullGitObjectId(args.parentOid, 'parentOid') : null
+      if (args.connectionId) {
+        const provider = getSshGitProvider(args.connectionId)
+        if (!provider) {
+          throw new Error(`No git provider for connection "${args.connectionId}"`)
+        }
+        return provider.getCommitDiff(args.worktreePath, {
+          commitOid,
+          parentOid,
+          filePath: args.filePath,
+          oldPath: args.oldPath
+        })
+      }
+      const worktreePath = await resolveRegisteredWorktreePath(args.worktreePath, store)
+      const filePath = validateGitRelativeFilePath(worktreePath, args.filePath)
+      const oldPath = args.oldPath
+        ? validateGitRelativeFilePath(worktreePath, args.oldPath)
+        : undefined
+      return getCommitDiff(worktreePath, {
+        commitOid,
+        parentOid,
         filePath,
         oldPath
       })
@@ -595,6 +955,25 @@ export function registerFilesystemHandlers(store: Store): void {
       const worktreePath = await resolveRegisteredWorktreePath(args.worktreePath, store)
       const filePath = validateGitRelativeFilePath(worktreePath, args.filePath)
       await discardChanges(worktreePath, filePath)
+    }
+  )
+
+  ipcMain.handle(
+    'git:bulkDiscard',
+    async (
+      _event,
+      args: { worktreePath: string; filePaths: string[]; connectionId?: string }
+    ): Promise<void> => {
+      if (args.connectionId) {
+        const provider = getSshGitProvider(args.connectionId)
+        if (!provider) {
+          throw new Error(`No git provider for connection "${args.connectionId}"`)
+        }
+        return provider.bulkDiscardChanges(args.worktreePath, args.filePaths)
+      }
+      const worktreePath = await resolveRegisteredWorktreePath(args.worktreePath, store)
+      const filePaths = args.filePaths.map((p) => validateGitRelativeFilePath(worktreePath, p))
+      await bulkDiscardChanges(worktreePath, filePaths)
     }
   )
 

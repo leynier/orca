@@ -1,5 +1,5 @@
 /* oxlint-disable max-lines */
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const {
   shellOpenExternalMock,
@@ -58,6 +58,11 @@ describe('browserManager', () => {
     guestOpenDevToolsMock.mockReset()
     webContentsFromIdMock.mockReset()
     browserManager.unregisterAll()
+    browserManager.setDictationShortcutForwardingPredicate(null)
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
   })
 
   it('validates popup URLs before opening externally', () => {
@@ -129,6 +134,32 @@ describe('browserManager', () => {
       origin: 'https://example.com',
       action: 'opened-in-orca'
     })
+  })
+
+  it('remembers the registered session profile for a browser page', () => {
+    const guest = {
+      id: 104,
+      isDestroyed: vi.fn(() => false),
+      getType: vi.fn(() => 'webview'),
+      setBackgroundThrottling: guestSetBackgroundThrottlingMock,
+      setWindowOpenHandler: guestSetWindowOpenHandlerMock,
+      on: guestOnMock,
+      off: guestOffMock,
+      openDevTools: guestOpenDevToolsMock
+    }
+    webContentsFromIdMock.mockReturnValue(guest)
+
+    browserManager.attachGuestPolicies(guest as never)
+    browserManager.registerGuest({
+      browserPageId: 'browser-1',
+      workspaceId: 'workspace-1',
+      worktreeId: 'wt-1',
+      webContentsId: guest.id,
+      rendererWebContentsId,
+      sessionProfileId: 'work'
+    })
+
+    expect(browserManager.getSessionProfileIdForTab('browser-1')).toBe('work')
   })
 
   it('falls back to opening popup URLs externally before a guest is registered', () => {
@@ -1067,7 +1098,7 @@ describe('browserManager', () => {
     }
 
     expect(rendererSendMock).toHaveBeenNthCalledWith(1, 'ui:newBrowserTab')
-    expect(rendererSendMock).toHaveBeenNthCalledWith(2, 'ui:newBrowserTab')
+    expect(rendererSendMock).toHaveBeenNthCalledWith(2, 'ui:newTerminalTab')
     expect(rendererSendMock).toHaveBeenNthCalledWith(3, 'ui:closeActiveTab')
     expect(rendererSendMock).toHaveBeenNthCalledWith(4, 'ui:switchTab', 1)
     expect(rendererSendMock).toHaveBeenNthCalledWith(5, 'ui:switchTerminalTab', 1)
@@ -1075,6 +1106,75 @@ describe('browserManager', () => {
     expect(rendererSendMock).toHaveBeenNthCalledWith(7, 'ui:focusBrowserAddressBar')
     expect(rendererSendMock).toHaveBeenNthCalledWith(8, 'ui:reloadBrowserPage')
     expect(rendererSendMock).toHaveBeenNthCalledWith(9, 'ui:hardReloadBrowserPage')
+  })
+
+  it('forwards browser guest Ctrl+Tab keydown and Ctrl release', () => {
+    const rendererSendMock = vi.fn()
+    const guest = {
+      id: 407,
+      isDestroyed: vi.fn(() => false),
+      getType: vi.fn(() => 'webview'),
+      setBackgroundThrottling: guestSetBackgroundThrottlingMock,
+      setWindowOpenHandler: guestSetWindowOpenHandlerMock,
+      on: guestOnMock,
+      off: guestOffMock,
+      openDevTools: guestOpenDevToolsMock
+    }
+
+    webContentsFromIdMock.mockImplementation((id: number) => {
+      if (id === guest.id) {
+        return guest
+      }
+      if (id === rendererWebContentsId) {
+        return { isDestroyed: vi.fn(() => false), send: rendererSendMock }
+      }
+      return null
+    })
+
+    browserManager.attachGuestPolicies(guest as never)
+    browserManager.registerGuest({
+      browserPageId: 'browser-1',
+      webContentsId: guest.id,
+      rendererWebContentsId
+    })
+
+    const beforeInputHandler = guestOnMock.mock.calls
+      .filter(([event]) => event === 'before-input-event')
+      .at(-1)?.[1] as
+      | ((event: { preventDefault: () => void }, input: Record<string, unknown>) => void)
+      | undefined
+
+    const keyDownPreventDefault = vi.fn()
+    beforeInputHandler?.(
+      { preventDefault: keyDownPreventDefault },
+      {
+        type: 'keyDown',
+        code: 'Tab',
+        key: 'Tab',
+        meta: false,
+        control: true,
+        alt: false,
+        shift: false
+      }
+    )
+    const keyUpPreventDefault = vi.fn()
+    beforeInputHandler?.(
+      { preventDefault: keyUpPreventDefault },
+      {
+        type: 'keyUp',
+        code: 'ControlRight',
+        key: 'Control',
+        meta: false,
+        control: false,
+        alt: false,
+        shift: false
+      }
+    )
+
+    expect(keyDownPreventDefault).toHaveBeenCalledTimes(1)
+    expect(keyUpPreventDefault).toHaveBeenCalledTimes(1)
+    expect(rendererSendMock).toHaveBeenNthCalledWith(1, 'ui:ctrlTabKeyDown', { shiftKey: false })
+    expect(rendererSendMock).toHaveBeenNthCalledWith(2, 'ui:ctrlTabKeyUp')
   })
 
   it('cleans up prior guest listeners before re-registering the same tab', () => {
@@ -1116,5 +1216,246 @@ describe('browserManager', () => {
     expect(
       guestOffMock.mock.calls.filter(([eventName]) => eventName === 'before-input-event')
     ).toHaveLength(2)
+  })
+
+  it('cancels pending anti-detection reattach timers when unregistering a guest', () => {
+    vi.useFakeTimers()
+
+    const debuggerHandlers = new Map<string, () => void>()
+    const debuggerAttachMock = vi.fn()
+    const guest = {
+      id: 809,
+      isDestroyed: vi.fn(() => false),
+      getType: vi.fn(() => 'webview'),
+      setBackgroundThrottling: guestSetBackgroundThrottlingMock,
+      setWindowOpenHandler: guestSetWindowOpenHandlerMock,
+      on: guestOnMock,
+      off: guestOffMock,
+      openDevTools: guestOpenDevToolsMock,
+      getURL: vi.fn(() => 'https://example.com/'),
+      debugger: {
+        isAttached: vi.fn(() => false),
+        attach: debuggerAttachMock,
+        sendCommand: vi.fn().mockResolvedValue(undefined),
+        on: vi.fn((eventName: string, handler: () => void) => {
+          debuggerHandlers.set(eventName, handler)
+        }),
+        off: vi.fn((eventName: string, handler: () => void) => {
+          if (debuggerHandlers.get(eventName) === handler) {
+            debuggerHandlers.delete(eventName)
+          }
+        })
+      }
+    }
+    webContentsFromIdMock.mockReturnValue(guest)
+
+    browserManager.attachGuestPolicies(guest as never)
+    browserManager.registerGuest({
+      browserPageId: 'browser-reattach',
+      webContentsId: 809,
+      rendererWebContentsId
+    })
+
+    debuggerHandlers.get('detach')?.()
+    expect(vi.getTimerCount()).toBe(1)
+
+    browserManager.unregisterGuest('browser-reattach')
+    expect(vi.getTimerCount()).toBe(0)
+
+    vi.advanceTimersByTime(500)
+    expect(debuggerAttachMock).toHaveBeenCalledTimes(1)
+  })
+
+  describe('setViewportOverride', () => {
+    function makeGuest(id: number): {
+      guest: Record<string, unknown>
+      debuggerSendCommand: ReturnType<typeof vi.fn>
+      debuggerIsAttached: ReturnType<typeof vi.fn>
+      debuggerAttach: ReturnType<typeof vi.fn>
+    } {
+      const debuggerSendCommand = vi.fn().mockResolvedValue(undefined)
+      const debuggerIsAttached = vi.fn(() => true)
+      const debuggerAttach = vi.fn()
+      const guest = {
+        id,
+        isDestroyed: vi.fn(() => false),
+        getType: vi.fn(() => 'webview'),
+        getUserAgent: vi.fn(
+          () =>
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) orca/1.0.0 Chrome/134.0.0.0 Electron/30.0.0 Safari/537.36'
+        ),
+        setBackgroundThrottling: guestSetBackgroundThrottlingMock,
+        setWindowOpenHandler: guestSetWindowOpenHandlerMock,
+        on: guestOnMock,
+        off: guestOffMock,
+        openDevTools: guestOpenDevToolsMock,
+        executeJavaScriptInIsolatedWorld: vi.fn().mockResolvedValue(true),
+        debugger: {
+          isAttached: debuggerIsAttached,
+          attach: debuggerAttach,
+          sendCommand: debuggerSendCommand
+        }
+      }
+      return { guest, debuggerSendCommand, debuggerIsAttached, debuggerAttach }
+    }
+
+    it('returns false when the tab is not registered', async () => {
+      const result = await browserManager.setViewportOverride('missing', {
+        width: 375,
+        height: 667,
+        deviceScaleFactor: 2,
+        mobile: true
+      })
+      expect(result).toBe(false)
+    })
+
+    it('applies device metrics, touch emulation, and a mobile UA for mobile presets', async () => {
+      const { guest, debuggerSendCommand } = makeGuest(4242)
+      webContentsFromIdMock.mockReturnValue(guest)
+      browserManager.attachGuestPolicies(guest as never)
+      browserManager.registerGuest({
+        browserPageId: 'tab-mobile',
+        webContentsId: guest.id as number,
+        rendererWebContentsId
+      })
+      webContentsFromIdMock.mockReset()
+      webContentsFromIdMock.mockReturnValue(guest)
+
+      const ok = await browserManager.setViewportOverride('tab-mobile', {
+        width: 375,
+        height: 667,
+        deviceScaleFactor: 2,
+        mobile: true
+      })
+      expect(ok).toBe(true)
+
+      expect(debuggerSendCommand).toHaveBeenCalledWith('Emulation.setDeviceMetricsOverride', {
+        width: 375,
+        height: 667,
+        deviceScaleFactor: 2,
+        mobile: true
+      })
+      expect(debuggerSendCommand).toHaveBeenCalledWith('Emulation.setTouchEmulationEnabled', {
+        enabled: true,
+        maxTouchPoints: 5
+      })
+      const uaCall = debuggerSendCommand.mock.calls.find(
+        (call) => call[0] === 'Emulation.setUserAgentOverride'
+      )
+      expect(uaCall).toBeDefined()
+      expect(uaCall?.[1]).toMatchObject({
+        userAgent: expect.stringContaining('iPhone')
+      })
+      // Chrome major from the guest UA should be spliced into the mobile UA.
+      expect(uaCall?.[1]).toMatchObject({
+        userAgent: expect.stringContaining('CriOS/134')
+      })
+    })
+
+    it('clears device metrics and disables touch for override=null', async () => {
+      const { guest, debuggerSendCommand } = makeGuest(4343)
+      webContentsFromIdMock.mockReturnValue(guest)
+      browserManager.attachGuestPolicies(guest as never)
+      browserManager.registerGuest({
+        browserPageId: 'tab-clear',
+        webContentsId: guest.id as number,
+        rendererWebContentsId
+      })
+
+      const ok = await browserManager.setViewportOverride('tab-clear', null)
+      expect(ok).toBe(true)
+
+      expect(debuggerSendCommand).toHaveBeenCalledWith('Emulation.clearDeviceMetricsOverride', {})
+      expect(debuggerSendCommand).toHaveBeenCalledWith('Emulation.setTouchEmulationEnabled', {
+        enabled: false,
+        maxTouchPoints: 0
+      })
+      expect(debuggerSendCommand).toHaveBeenCalledWith('Emulation.setUserAgentOverride', {
+        userAgent: ''
+      })
+    })
+
+    it('attaches the debugger if not already attached and does not detach after', async () => {
+      const { guest, debuggerSendCommand, debuggerAttach } = makeGuest(4444)
+      ;(guest.debugger as { isAttached: ReturnType<typeof vi.fn> }).isAttached = vi.fn(() => false)
+      webContentsFromIdMock.mockReturnValue(guest)
+      browserManager.attachGuestPolicies(guest as never)
+      browserManager.registerGuest({
+        browserPageId: 'tab-attach',
+        webContentsId: guest.id as number,
+        rendererWebContentsId
+      })
+
+      await browserManager.setViewportOverride('tab-attach', {
+        width: 1024,
+        height: 768,
+        deviceScaleFactor: 1,
+        mobile: false
+      })
+
+      expect(debuggerAttach).toHaveBeenCalledWith('1.3')
+      expect(debuggerSendCommand).toHaveBeenCalled()
+      // Why: detaching would clear Page.addScriptToEvaluateOnNewDocument
+      // (anti-detection). Guard regression.
+      expect((guest.debugger as { detach?: unknown }).detach ?? undefined).toBeUndefined()
+    })
+
+    it('returns false when debugger.attach throws (e.g. DevTools already open)', async () => {
+      const { guest, debuggerSendCommand, debuggerAttach } = makeGuest(4545)
+      ;(guest.debugger as { isAttached: ReturnType<typeof vi.fn> }).isAttached = vi.fn(() => false)
+      // Why: Electron throws from debugger.attach if another client (e.g. the
+      // user's open DevTools window) is already attached. setViewportOverride
+      // must surface this as a clean `false` rather than an unhandled rejection.
+      debuggerAttach.mockImplementation(() => {
+        throw new Error('Another debugger is already attached')
+      })
+      webContentsFromIdMock.mockReturnValue(guest)
+      browserManager.attachGuestPolicies(guest as never)
+      browserManager.registerGuest({
+        browserPageId: 'tab-attach-throws',
+        webContentsId: guest.id as number,
+        rendererWebContentsId
+      })
+
+      const ok = await browserManager.setViewportOverride('tab-attach-throws', {
+        width: 1024,
+        height: 768,
+        deviceScaleFactor: 1,
+        mobile: false
+      })
+
+      expect(ok).toBe(false)
+      expect(debuggerAttach).toHaveBeenCalledWith('1.3')
+      expect(debuggerSendCommand).not.toHaveBeenCalled()
+    })
+
+    it('installs annotation viewport bridge in an isolated world', async () => {
+      const { guest } = makeGuest(4646)
+      webContentsFromIdMock.mockReturnValue(guest)
+      browserManager.attachGuestPolicies(guest as never)
+      browserManager.registerGuest({
+        browserPageId: 'tab-annotations',
+        webContentsId: guest.id as number,
+        rendererWebContentsId
+      })
+
+      const ok = await browserManager.setAnnotationViewportBridge('tab-annotations', {
+        emitViewport: false,
+        enabled: true,
+        markers: [],
+        token: 'annotationviewporttoken'
+      })
+
+      expect(ok).toBe(true)
+      expect(guest.executeJavaScriptInIsolatedWorld).toHaveBeenCalledWith(
+        expect.any(Number),
+        [
+          expect.objectContaining({
+            code: expect.stringContaining('__orcaBrowserAnnotationViewportBridge')
+          })
+        ],
+        false
+      )
+    })
   })
 })

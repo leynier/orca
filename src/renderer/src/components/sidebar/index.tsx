@@ -7,11 +7,11 @@ import SidebarNav from './SidebarNav'
 import WorktreeList from './WorktreeList'
 import SidebarToolbar from './SidebarToolbar'
 import WorktreeMetaDialog from './WorktreeMetaDialog'
-import DeleteWorktreeDialog from './DeleteWorktreeDialog'
 import NonGitFolderDialog from './NonGitFolderDialog'
 import RemoveFolderDialog from './RemoveFolderDialog'
 import AddRepoDialog from './AddRepoDialog'
 import OrcaYamlTrustDialog from './OrcaYamlTrustDialog'
+import type { VirtualizedScrollAnchor } from '@/hooks/useVirtualizedScrollAnchor'
 
 const MIN_WIDTH = 220
 const MAX_WIDTH = 500
@@ -21,9 +21,15 @@ type SidebarProps = {
    *  side of the resize handle so the worktree sidebar can render on either
    *  edge of the window when the user swaps sidebar sides. */
   side?: 'left' | 'right'
+  worktreeScrollOffsetRef: React.MutableRefObject<number>
+  worktreeScrollAnchorRef: React.MutableRefObject<VirtualizedScrollAnchor>
 }
 
-function Sidebar({ side = 'left' }: SidebarProps): React.JSX.Element {
+function Sidebar({
+  side = 'left',
+  worktreeScrollOffsetRef,
+  worktreeScrollAnchorRef
+}: SidebarProps): React.JSX.Element {
   const sidebarOpen = useAppStore((s) => s.sidebarOpen)
   const sidebarWidth = useAppStore((s) => s.sidebarWidth)
   const setSidebarWidth = useAppStore((s) => s.setSidebarWidth)
@@ -73,7 +79,10 @@ function Sidebar({ side = 'left' }: SidebarProps): React.JSX.Element {
         <SidebarNav />
         <SidebarHeader />
 
-        <WorktreeList />
+        <WorktreeList
+          scrollOffsetRef={worktreeScrollOffsetRef}
+          scrollAnchorRef={worktreeScrollAnchorRef}
+        />
 
         {/* Fixed bottom toolbar */}
         <SidebarToolbar />
@@ -87,7 +96,6 @@ function Sidebar({ side = 'left' }: SidebarProps): React.JSX.Element {
 
       {/* Dialog (rendered outside sidebar to avoid clipping) */}
       <WorktreeMetaDialog />
-      <DeleteWorktreeDialog />
       <NonGitFolderDialog />
       <RemoveFolderDialog />
       <AddRepoDialog />

@@ -332,15 +332,8 @@ export function AccountsPane({ settings, updateSettings }: AccountsPaneProps): R
                 const isBusy = claudeAction !== 'idle'
 
                 return (
-                  <button
+                  <div
                     key={account.id}
-                    type="button"
-                    onClick={() =>
-                      void runClaudeAccountAction(`select:${account.id}`, () =>
-                        window.api.claudeAccounts.select({ accountId: account.id })
-                      )
-                    }
-                    disabled={isBusy}
                     className={`flex w-full items-center justify-between gap-3 rounded-md border px-3 py-2.5 text-left transition-colors ${
                       isActive
                         ? 'border-foreground/20 bg-accent/15'
@@ -348,7 +341,16 @@ export function AccountsPane({ settings, updateSettings }: AccountsPaneProps): R
                     }`}
                   >
                     <div className="flex w-full items-center justify-between gap-3 max-md:flex-col max-md:items-start">
-                      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          void runClaudeAccountAction(`select:${account.id}`, () =>
+                            window.api.claudeAccounts.select({ accountId: account.id })
+                          )
+                        }
+                        disabled={isBusy}
+                        className="flex min-w-0 flex-1 flex-col gap-0.5 text-left disabled:cursor-default"
+                      >
                         <div className="flex min-w-0 items-center gap-2">
                           <span className="truncate text-sm font-medium">{account.email}</span>
                           {isActive ? (
@@ -365,7 +367,7 @@ export function AccountsPane({ settings, updateSettings }: AccountsPaneProps): R
                             ? `${account.organizationName} · ${formatAccountTimestamp(account.lastAuthenticatedAt)}`
                             : formatAccountTimestamp(account.lastAuthenticatedAt)}
                         </span>
-                      </div>
+                      </button>
                       <div className="flex shrink-0 items-center justify-end gap-1 max-md:w-full max-md:flex-wrap">
                         <Button
                           variant="ghost"
@@ -401,7 +403,7 @@ export function AccountsPane({ settings, updateSettings }: AccountsPaneProps): R
                         </Button>
                       </div>
                     </div>
-                  </button>
+                  </div>
                 )
               })
             )}
@@ -428,7 +430,16 @@ export function AccountsPane({ settings, updateSettings }: AccountsPaneProps): R
         <SearchableSetting
           title="Codex Accounts"
           description="Manage which Codex account Orca uses for live rate limit fetching."
-          keywords={['codex', 'account', 'rate limit', 'status bar', 'quota']}
+          // Why: this single SearchableSetting backs the whole Codex section,
+          // including the "Active Codex Account" sub-control (account picker
+          // below). Roll every Codex search entry's title/description/keywords
+          // into one haystack so a search for "Active Codex Account" doesn't
+          // render the section header with no body underneath it.
+          keywords={ACCOUNTS_CODEX_SEARCH_ENTRIES.flatMap((entry) => [
+            entry.title,
+            entry.description ?? '',
+            ...(entry.keywords ?? [])
+          ])}
           className="space-y-3 px-1 py-2"
         >
           {/* Why: Settings deep-links can target this subsection directly from
@@ -505,15 +516,8 @@ export function AccountsPane({ settings, updateSettings }: AccountsPaneProps): R
                 const isBusy = codexAction !== 'idle'
 
                 return (
-                  <button
+                  <div
                     key={account.id}
-                    type="button"
-                    onClick={() =>
-                      void runCodexAccountAction(`select:${account.id}`, () =>
-                        window.api.codexAccounts.select({ accountId: account.id })
-                      )
-                    }
-                    disabled={isBusy}
                     className={`flex w-full items-center justify-between gap-3 rounded-md border px-3 py-2.5 text-left transition-colors ${
                       isActive
                         ? 'border-foreground/20 bg-accent/15'
@@ -521,7 +525,16 @@ export function AccountsPane({ settings, updateSettings }: AccountsPaneProps): R
                     }`}
                   >
                     <div className="flex w-full items-center justify-between gap-3 max-md:flex-col max-md:items-start">
-                      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          void runCodexAccountAction(`select:${account.id}`, () =>
+                            window.api.codexAccounts.select({ accountId: account.id })
+                          )
+                        }
+                        disabled={isBusy}
+                        className="flex min-w-0 flex-1 flex-col gap-0.5 text-left disabled:cursor-default"
+                      >
                         <div className="flex min-w-0 items-center gap-2">
                           <span className="truncate text-sm font-medium">{account.email}</span>
                           {isActive ? (
@@ -544,7 +557,7 @@ export function AccountsPane({ settings, updateSettings }: AccountsPaneProps): R
                             {formatAccountTimestamp(account.lastAuthenticatedAt)}
                           </span>
                         </div>
-                      </div>
+                      </button>
 
                       <div className="flex shrink-0 items-center justify-end gap-1 max-md:w-full max-md:flex-wrap">
                         {/* Why: selecting an account is the primary action in this row.
@@ -588,7 +601,7 @@ export function AccountsPane({ settings, updateSettings }: AccountsPaneProps): R
                         </Button>
                       </div>
                     </div>
-                  </button>
+                  </div>
                 )
               })}
             </div>

@@ -8,6 +8,7 @@ import type { WebLinksAddon } from '@xterm/addon-web-links'
 import type { WebglAddon } from '@xterm/addon-webgl'
 import type { SerializeAddon } from '@xterm/addon-serialize'
 import type { GlobalSettings } from '../../../../shared/types'
+import type { TerminalLeafId } from '../../../../shared/stable-pane-id'
 
 // ---------------------------------------------------------------------------
 // Public interfaces
@@ -21,9 +22,14 @@ export type PaneSpawnHints = {
   cwd?: string
 }
 
+export type ClosedPaneInfo = {
+  paneId: number
+  leafId: TerminalLeafId
+}
+
 export type PaneManagerOptions = {
   onPaneCreated?: (pane: ManagedPane, spawnHints?: PaneSpawnHints) => void | Promise<void>
-  onPaneClosed?: (paneId: number) => void
+  onPaneClosed?: (paneId: number, closedPane?: ClosedPaneInfo) => void
   onActivePaneChange?: (pane: ManagedPane) => void
   onLayoutChanged?: () => void
   terminalOptions?: (paneId: number) => Partial<ITerminalOptions>
@@ -54,6 +60,11 @@ export type PaneStyleOptions = {
 
 export type ManagedPane = {
   id: number
+  /** Durable terminal layout leaf UUID. Use this for paneKey/ORCA_PANE_KEY and
+   *  persisted leaf-keyed state; `id` is only the live renderer handle. */
+  leafId: TerminalLeafId
+  /** Compatibility alias while callers migrate from the older stablePaneId name. */
+  stablePaneId: TerminalLeafId
   terminal: Terminal
   container: HTMLElement // the .pane element
   linkTooltip: HTMLElement
@@ -67,6 +78,7 @@ export type ManagedPane = {
 // ---------------------------------------------------------------------------
 
 export type ScrollState = {
+  bufferType: 'normal' | 'alternate'
   wasAtBottom: boolean
   firstVisibleLineContent: string
   viewportY: number
@@ -80,6 +92,9 @@ export type ManagedPaneInternal = {
   gpuRenderingEnabled: boolean
   webglAttachmentDeferred: boolean
   webglDisabledAfterContextLoss: boolean
+  // Why: complex-script shaping/RTL rendering is visibly wrong in xterm WebGL;
+  // keep auto-mode panes on DOM once their output proves they need browser text shaping.
+  hasComplexScriptOutput: boolean
   webglAddon: WebglAddon | null
   // Why nullable: ligatures are opt-in per font and toggleable at runtime,
   // so the addon instance only exists while the feature is active. A null

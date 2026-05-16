@@ -58,7 +58,7 @@ export function ActivityBarButton({
         <button
           className={cn(
             'relative flex items-center justify-center transition-colors',
-            isTop ? 'h-[42px] w-9' : 'w-10 h-10',
+            isTop ? 'h-[36px] w-9' : 'w-10 h-10',
             active ? 'text-foreground' : 'text-muted-foreground/60 hover:text-muted-foreground'
           )}
           onClick={onClick}

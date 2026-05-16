@@ -1,7 +1,6 @@
 import React, { useState, useCallback } from 'react'
 import { X, Wrench, ChevronDown } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
 import { AgentStateDot, agentStateLabel, type AgentDotState } from '@/components/AgentStateDot'
 import { AgentIcon } from '@/lib/agent-catalog'
 import { agentTypeToIconAgent, formatAgentTypeLabel } from '@/lib/agent-status'
@@ -94,6 +93,15 @@ type Props = {
    * slot presence, so default stays 'md'.
    */
   stateDotSize?: 'sm' | 'md'
+  /**
+   * Why: the inline-in-card variant lives next to a worktree card that the
+   * user clicks to jump directly to the agent — a separate expand chevron
+   * and a second identity glyph (Claude/Gemini/…) are redundant noise in
+   * that tighter layout. The full dashboard keeps both, so these flags
+   * default to showing them.
+   */
+  hideIdentityIcon?: boolean
+  hideExpand?: boolean
 }
 
 const DashboardAgentRow = React.memo(function DashboardAgentRow({
@@ -102,7 +110,9 @@ const DashboardAgentRow = React.memo(function DashboardAgentRow({
   onActivate,
   now,
   isUnvisited = false,
-  stateDotSize = 'md'
+  stateDotSize = 'md',
+  hideIdentityIcon = false,
+  hideExpand = false
 }: Props) {
   const [expanded, setExpanded] = useState(false)
   // Why: stop propagation so clicking the X doesn't also fire the worktree
@@ -192,7 +202,7 @@ const DashboardAgentRow = React.memo(function DashboardAgentRow({
     <div
       onClick={handleActivate}
       className={cn(
-        'group relative flex flex-col pl-1 pr-1.5 py-0.5',
+        'group relative flex flex-col pr-1.5 py-0.5',
         // Why: hover tints have to go in opposite directions per theme —
         // dark mode adds light on dark (bg-accent/30), light mode needs to
         // add *dark* on white. Alpha-on-accent in light mode collapses to
@@ -211,32 +221,23 @@ const DashboardAgentRow = React.memo(function DashboardAgentRow({
             bar + right-side dot combo, which double-encoded state. Size md
             gives the glyph enough presence for the leading slot without
             overpowering the prompt text. */}
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <span className="inline-flex shrink-0 items-center justify-center">
-              <AgentStateDot state={asDotState(agent.state)} size={stateDotSize} />
-            </span>
-          </TooltipTrigger>
-          <TooltipContent side="top" sideOffset={4}>
-            {agent.entry.interrupted ? 'Interrupted' : agentStateLabel(asDotState(agent.state))}
-          </TooltipContent>
-        </Tooltip>
+        <span
+          className="inline-flex shrink-0 items-center justify-center"
+          title={agent.entry.interrupted ? 'Interrupted' : agentStateLabel(asDotState(agent.state))}
+        >
+          <AgentStateDot state={asDotState(agent.state)} size={stateDotSize} />
+        </span>
         {/* Why: identity (Claude/Codex/Gemini/…) sits inline with the prompt
             so the reader gets "state → who → what they said" left-to-right
             on the top row. The sub-rows (tool step, assistant response) are
             about the same agent and do not need the icon repeated next to
             them — keeping the icon only on the prompt row lets the sub-rows
             indent under the prompt text cleanly. */}
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <span className="inline-flex shrink-0">
-              <AgentIcon agent={agentTypeToIconAgent(agent.agentType)} size={14} />
-            </span>
-          </TooltipTrigger>
-          <TooltipContent side="top" sideOffset={4}>
-            {formatAgentTypeLabel(agent.agentType)}
-          </TooltipContent>
-        </Tooltip>
+        {!hideIdentityIcon && (
+          <span className="inline-flex shrink-0" title={formatAgentTypeLabel(agent.agentType)}>
+            <AgentIcon agent={agentTypeToIconAgent(agent.agentType)} size={14} />
+          </span>
+        )}
         {/* Why: animate between a 1-line clipped height and the content's
             natural height using Chromium's `interpolate-size: allow-keywords`
             — this is the only way to transition a `height` property to/from
@@ -308,27 +309,21 @@ const DashboardAgentRow = React.memo(function DashboardAgentRow({
                     ? formatTimeAgo(startedAt, now)
                     : null}
               </span>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button
-                    type="button"
-                    onClick={handleDismiss}
-                    onMouseDown={stopMouseDown}
-                    onKeyDown={stopKeyDown}
-                    className={cn(
-                      '[grid-area:1/1] inline-flex items-center justify-center text-muted-foreground/70 hover:text-foreground',
-                      'opacity-0 transition-opacity duration-150',
-                      'group-hover:opacity-100 focus-visible:opacity-100'
-                    )}
-                    aria-label="Dismiss agent"
-                  >
-                    <X className="size-3.5" />
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent side="top" sideOffset={4}>
-                  Dismiss
-                </TooltipContent>
-              </Tooltip>
+              <button
+                type="button"
+                onClick={handleDismiss}
+                onMouseDown={stopMouseDown}
+                onKeyDown={stopKeyDown}
+                className={cn(
+                  '[grid-area:1/1] inline-flex items-center justify-center text-muted-foreground/70 hover:text-foreground',
+                  'opacity-0 transition-opacity duration-150',
+                  'group-hover:opacity-100 focus-visible:opacity-100'
+                )}
+                aria-label="Dismiss agent"
+                title="Dismiss"
+              >
+                <X className="size-3.5" />
+              </button>
             </span>
           )}
           {/* Why: when there is no timestamp yet (fresh agent, never
@@ -337,27 +332,21 @@ const DashboardAgentRow = React.memo(function DashboardAgentRow({
               reachable. Rare path; most rows have a timestamp the moment
               they start. */}
           {startedAt === null && doneAt === null && (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <button
-                  type="button"
-                  onClick={handleDismiss}
-                  onMouseDown={stopMouseDown}
-                  onKeyDown={stopKeyDown}
-                  className={cn(
-                    'inline-flex shrink-0 items-center justify-center text-muted-foreground/70 hover:text-foreground',
-                    'opacity-0 transition-opacity duration-150',
-                    'group-hover:opacity-100 focus-visible:opacity-100'
-                  )}
-                  aria-label="Dismiss agent"
-                >
-                  <X className="size-3.5" />
-                </button>
-              </TooltipTrigger>
-              <TooltipContent side="top" sideOffset={4}>
-                Dismiss
-              </TooltipContent>
-            </Tooltip>
+            <button
+              type="button"
+              onClick={handleDismiss}
+              onMouseDown={stopMouseDown}
+              onKeyDown={stopKeyDown}
+              className={cn(
+                'inline-flex shrink-0 items-center justify-center text-muted-foreground/70 hover:text-foreground',
+                'opacity-0 transition-opacity duration-150',
+                'group-hover:opacity-100 focus-visible:opacity-100'
+              )}
+              aria-label="Dismiss agent"
+              title="Dismiss"
+            >
+              <X className="size-3.5" />
+            </button>
           )}
           {/* Why: chevron points down when collapsed (content below is
               available) and rotates 180° to point up when expanded
@@ -367,19 +356,24 @@ const DashboardAgentRow = React.memo(function DashboardAgentRow({
               old node unmounts. Invisible placeholder keeps vertical
               alignment stable across rows when nothing is expandable
               so the row-trailing edge stays stable. */}
-          <button
-            type="button"
-            onClick={handleToggleExpand}
-            onMouseDown={stopMouseDown}
-            onKeyDown={stopKeyDown}
-            className="inline-flex shrink-0 items-center justify-center text-muted-foreground/60 hover:text-foreground"
-            aria-label={expanded ? 'Collapse details' : 'Expand details'}
-            aria-expanded={expanded}
-          >
-            <ChevronDown
-              className={cn('size-3.5 transition-transform duration-150', expanded && 'rotate-180')}
-            />
-          </button>
+          {!hideExpand && (
+            <button
+              type="button"
+              onClick={handleToggleExpand}
+              onMouseDown={stopMouseDown}
+              onKeyDown={stopKeyDown}
+              className="inline-flex shrink-0 items-center justify-center text-muted-foreground/60 hover:text-foreground"
+              aria-label={expanded ? 'Collapse details' : 'Expand details'}
+              aria-expanded={expanded}
+            >
+              <ChevronDown
+                className={cn(
+                  'size-3.5 transition-transform duration-150',
+                  expanded && 'rotate-180'
+                )}
+              />
+            </button>
+          )}
         </span>
       </div>
       {/* Why: tool row and message row both carry different info — tool shows
