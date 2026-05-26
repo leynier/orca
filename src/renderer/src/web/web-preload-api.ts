@@ -1647,6 +1647,7 @@ function createAgentHooksApi(): NonNullable<Partial<PreloadApi>['agentHooks']> {
       | 'codex'
       | 'gemini'
       | 'antigravity'
+      | 'amp'
       | 'cursor'
       | 'droid'
       | 'command-code'
@@ -1666,6 +1667,7 @@ function createAgentHooksApi(): NonNullable<Partial<PreloadApi>['agentHooks']> {
     codexStatus: () => status('codex'),
     geminiStatus: () => status('gemini'),
     antigravityStatus: () => status('antigravity'),
+    ampStatus: () => status('amp'),
     cursorStatus: () => status('cursor'),
     droidStatus: () => status('droid'),
     commandCodeStatus: () => status('command-code'),

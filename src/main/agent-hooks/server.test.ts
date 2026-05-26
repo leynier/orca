@@ -2145,6 +2145,187 @@ describe('AgentHookServer listener replay', () => {
       server.stop()
     }
   })
+
+  it('accepts Amp plugin hook posts on /hook/amp', async () => {
+    const server = new AgentHookServer()
+    await server.start({ env: 'production' })
+    try {
+      const env = server.buildPtyEnv()
+      const listener = vi.fn()
+      server.setListener(listener)
+
+      const response = await fetch(`http://127.0.0.1:${env.ORCA_AGENT_HOOK_PORT}/hook/amp`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Orca-Agent-Hook-Token': env.ORCA_AGENT_HOOK_TOKEN
+        },
+        body: JSON.stringify(
+          buildBody({
+            hook_event_name: 'agent.start',
+            message: 'verify Amp route'
+          })
+        )
+      })
+      expect(response.status).toBe(204)
+
+      expect(listener).toHaveBeenCalledWith(
+        expect.objectContaining({
+          paneKey: PANE,
+          tabId: 'tab-1',
+          worktreeId: 'wt-1',
+          connectionId: null,
+          payload: expect.objectContaining({
+            state: 'working',
+            prompt: 'verify Amp route',
+            agentType: 'amp'
+          })
+        })
+      )
+    } finally {
+      server.stop()
+    }
+  })
+})
+
+describe('Amp hook normalization', () => {
+  it('maps agent lifecycle events to working and done states', () => {
+    const start = _internals.normalizeHookPayload(
+      'amp',
+      buildBody({
+        hook_event_name: 'agent.start',
+        message: 'wire Amp hooks'
+      }),
+      'production'
+    )
+
+    expect(start?.payload).toMatchObject({
+      state: 'working',
+      prompt: 'wire Amp hooks',
+      agentType: 'amp'
+    })
+
+    const done = _internals.normalizeHookPayload(
+      'amp',
+      buildBody({
+        hook_event_name: 'agent.end',
+        message: 'wire Amp hooks',
+        status: 'done'
+      }),
+      'production'
+    )
+
+    expect(done?.payload).toMatchObject({
+      state: 'done',
+      prompt: 'wire Amp hooks',
+      agentType: 'amp'
+    })
+  })
+
+  it('surfaces Amp tool call and result context while preserving the prompt', () => {
+    _internals.normalizeHookPayload(
+      'amp',
+      buildBody({
+        hook_event_name: 'agent.start',
+        message: 'run tests'
+      }),
+      'production'
+    )
+
+    const toolCall = _internals.normalizeHookPayload(
+      'amp',
+      buildBody({
+        hook_event_name: 'tool.call',
+        tool: 'shell_command',
+        input: { command: 'pnpm test --run src/main/amp/hook-service.test.ts' }
+      }),
+      'production'
+    )
+
+    expect(toolCall?.payload).toMatchObject({
+      state: 'working',
+      prompt: 'run tests',
+      agentType: 'amp',
+      toolName: 'shell_command',
+      toolInput: 'pnpm test --run src/main/amp/hook-service.test.ts'
+    })
+
+    const result = _internals.normalizeHookPayload(
+      'amp',
+      buildBody({
+        hook_event_name: 'tool.result',
+        tool: 'shell_command',
+        input: { command: 'pnpm test --run src/main/amp/hook-service.test.ts' },
+        status: 'done',
+        output: 'tests passed'
+      }),
+      'production'
+    )
+
+    expect(result?.payload).toMatchObject({
+      state: 'working',
+      prompt: 'run tests',
+      agentType: 'amp',
+      toolName: 'shell_command',
+      toolInput: 'pnpm test --run src/main/amp/hook-service.test.ts',
+      lastAssistantMessage: 'tests passed'
+    })
+  })
+
+  it('marks cancelled Amp turns as interrupted done states', () => {
+    const cancelled = _internals.normalizeHookPayload(
+      'amp',
+      buildBody({
+        hook_event_name: 'agent.end',
+        message: 'stop this run',
+        status: 'cancelled'
+      }),
+      'production'
+    )
+
+    expect(cancelled?.payload).toMatchObject({
+      state: 'done',
+      prompt: 'stop this run',
+      agentType: 'amp',
+      interrupted: true
+    })
+  })
+
+  it('treats session.start as cache reset without creating a visible row', () => {
+    _internals.normalizeHookPayload(
+      'amp',
+      buildBody({
+        hook_event_name: 'agent.start',
+        message: 'old prompt'
+      }),
+      'production'
+    )
+
+    const sessionStart = _internals.normalizeHookPayload(
+      'amp',
+      buildBody({ hook_event_name: 'session.start', threadId: 'thread-1' }),
+      'production'
+    )
+    expect(sessionStart).toBeNull()
+
+    const nextTool = _internals.normalizeHookPayload(
+      'amp',
+      buildBody({
+        hook_event_name: 'tool.call',
+        tool: 'Read',
+        input: { file_path: '/tmp/file.ts' }
+      }),
+      'production'
+    )
+
+    expect(nextTool?.payload).toMatchObject({
+      state: 'working',
+      prompt: '',
+      agentType: 'amp',
+      toolName: 'Read',
+      toolInput: '/tmp/file.ts'
+    })
+  })
 })
 
 describe('Claude hook normalization', () => {

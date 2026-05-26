@@ -1029,6 +1029,42 @@ function extractAntigravityToolFields(
   return {}
 }
 
+function extractAmpToolFields(
+  eventName: unknown,
+  hookPayload: Record<string, unknown>
+): ToolSnapshot {
+  if (eventName === 'tool.call' || eventName === 'tool.result') {
+    const toolName =
+      readString(hookPayload, 'tool') ??
+      readString(hookPayload, 'toolName') ??
+      readString(hookPayload, 'name')
+    const toolInput =
+      deriveToolInputPreview(toolName, hookPayload.input) ??
+      deriveToolInputPreview(toolName, hookPayload.tool_input) ??
+      deriveToolInputPreview(toolName, hookPayload.arguments) ??
+      // Why: Amp plugin tools can have arbitrary names, so fall back to the
+      // obvious argument fields instead of rendering an empty tool preview.
+      deriveFallbackToolInputPreview(hookPayload.input) ??
+      deriveFallbackToolInputPreview(hookPayload.tool_input) ??
+      deriveFallbackToolInputPreview(hookPayload.arguments)
+    const update: ToolSnapshot = toolUpdate(
+      { toolName, toolInput },
+      { hasToolInputField: hasAnyOwnField(hookPayload, ['input', 'tool_input', 'arguments']) }
+    )
+    if (eventName === 'tool.result') {
+      const responseText =
+        readFirstString(hookPayload, ['error', 'output', 'result', 'message']) ??
+        extractToolResponseText(hookPayload.output) ??
+        extractToolResponseText(hookPayload.result)
+      if (responseText) {
+        update.lastAssistantMessage = responseText
+      }
+    }
+    return update
+  }
+  return {}
+}
+
 function extractOpenCodeToolFields(
   eventName: unknown,
   hookPayload: Record<string, unknown>
@@ -1627,6 +1663,8 @@ function isNewTurnEvent(source: AgentHookSource, eventName: unknown): boolean {
       return eventName === 'BeforeAgent'
     case 'antigravity':
       return eventName === 'PreInvocation'
+    case 'amp':
+      return eventName === 'agent.start'
     case 'opencode':
       return false
     case 'cursor':
@@ -1670,6 +1708,8 @@ function extractToolFields(
       return extractGeminiToolFields(eventName, hookPayload)
     case 'antigravity':
       return extractAntigravityToolFields(eventName, hookPayload)
+    case 'amp':
+      return extractAmpToolFields(eventName, hookPayload)
     case 'opencode':
       return extractOpenCodeToolFields(eventName, hookPayload)
     case 'cursor':
@@ -1855,6 +1895,54 @@ function normalizeAntigravityEvent(
     state.antigravityCompletedTranscriptByPaneKey.set(paneKey, transcriptPath)
   }
   return payload
+}
+
+function normalizeAmpEvent(
+  state: HookListenerState,
+  eventName: unknown,
+  promptText: string,
+  paneKey: string,
+  hookPayload: Record<string, unknown>
+): ParsedAgentStatusPayload | null {
+  if (eventName === 'session.start') {
+    clearPaneTurnCacheState(state, paneKey)
+    return null
+  }
+
+  const stateName =
+    eventName === 'agent.start' || eventName === 'tool.call' || eventName === 'tool.result'
+      ? 'working'
+      : eventName === 'agent.end'
+        ? 'done'
+        : null
+
+  if (!stateName) {
+    return null
+  }
+
+  const snapshot = resolveToolState(
+    state,
+    paneKey,
+    extractToolFields('amp', eventName, hookPayload),
+    { resetOnNewTurn: isNewTurnEvent('amp', eventName) }
+  )
+
+  const interrupted =
+    eventName === 'agent.end' && hookPayload.status === 'cancelled' ? true : undefined
+
+  return parseAgentStatusPayload(
+    JSON.stringify({
+      state: stateName,
+      prompt: resolvePrompt(state, paneKey, promptText, {
+        resetOnNewTurn: isNewTurnEvent('amp', eventName)
+      }),
+      agentType: 'amp',
+      toolName: snapshot.toolName,
+      toolInput: snapshot.toolInput,
+      lastAssistantMessage: snapshot.lastAssistantMessage,
+      interrupted
+    })
+  )
 }
 
 function normalizeCodexEvent(
@@ -2421,6 +2509,9 @@ export function normalizeHookPayload(
     case 'antigravity':
       payload = normalizeAntigravityEvent(state, eventName, promptText, paneKey, hookPayloadRecord)
       break
+    case 'amp':
+      payload = normalizeAmpEvent(state, eventName, promptText, paneKey, hookPayloadRecord)
+      break
     case 'opencode':
       payload = normalizeOpenCodeEvent(state, eventName, promptText, paneKey, hookPayloadRecord)
       break
@@ -2496,6 +2587,7 @@ export const HOOK_SOURCE_BY_PATHNAME: Readonly<Record<string, AgentHookSource>> 
   '/hook/codex': 'codex',
   '/hook/gemini': 'gemini',
   '/hook/antigravity': 'antigravity',
+  '/hook/amp': 'amp',
   '/hook/opencode': 'opencode',
   '/hook/cursor': 'cursor',
   '/hook/pi': 'pi',
