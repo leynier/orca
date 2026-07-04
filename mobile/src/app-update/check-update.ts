@@ -138,6 +138,8 @@ export function evaluateUpdate(input: {
   }
 
   const winners = input.candidates.filter((candidate) => compareCandidates(candidate, latest) === 0)
+  // Why: once the marketing version has moved past what's installed, prefer any
+  // same-version update URL over the exact build-number winner.
   const urlCandidates =
     compareVersions(latest.version, input.installedVersion) > 0
       ? input.candidates.filter(

@@ -28,7 +28,7 @@ const MAX_RELEASE_PAGES = 10
 
 const ReleaseAsset = z.object({
   name: z.string(),
-  browser_download_url: z.string().url()
+  browser_download_url: z.url()
 })
 
 const GithubRelease = z.object({

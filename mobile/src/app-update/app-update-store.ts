@@ -22,6 +22,10 @@ const DISMISSED_KEY = 'orca:dismissed-update'
 const CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000 // once per day
 const REQUEST_TIMEOUT_MS = 12_000
 
+// Why: status flips after async storage reads, so block overlapping focus events
+// before the first await can let another check enter.
+let updateCheckInFlight = false
+
 export type AppUpdateState = {
   status: UpdateStatus
   latestVersion: string | null
@@ -45,114 +49,119 @@ export const useAppUpdateStore = create<AppUpdateState>((set, get) => ({
   dismissedUpdateId: null,
 
   checkForUpdate: async (opts) => {
-    if (get().status === 'checking') {
+    if (updateCheckInFlight || get().status === 'checking') {
       return
     }
+    updateCheckInFlight = true
 
-    const lastCheckRaw = await AsyncStorage.getItem(LAST_CHECK_KEY).catch(() => null)
-    const lastCheckAtMs = lastCheckRaw ? Number(lastCheckRaw) : null
-    const now = Date.now()
-    if (
-      !shouldRunUpdateCheck({
-        force: opts?.force,
-        hasInMemoryResult: get().status !== 'idle',
-        now,
-        lastCheckAtMs,
-        intervalMs: CHECK_INTERVAL_MS
-      })
-    ) {
-      return
-    }
-
-    // Why: capture the pre-check status before overwriting it. On a transient
-    // network failure we restore it below so a previously-known update stays
-    // visible instead of being yanked for up to 24h (the throttle still
-    // advanced).
-    const wasAvailable = get().status === 'available'
-    set({ status: 'checking' })
-
-    const controller = new AbortController()
-    const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
-
-    let result
     try {
-      result = await performUpdateCheck({
-        platform: Platform.OS === 'ios' ? 'ios' : 'android',
-        installedVersion: getInstalledVersion(),
-        installedBuildNumber: getInstalledBuildNumber(),
-        signal: controller.signal
+      const lastCheckRaw = await AsyncStorage.getItem(LAST_CHECK_KEY).catch(() => null)
+      const lastCheckAtMs = lastCheckRaw ? Number(lastCheckRaw) : null
+      const now = Date.now()
+      if (
+        !shouldRunUpdateCheck({
+          force: opts?.force,
+          hasInMemoryResult: get().status !== 'idle',
+          now,
+          lastCheckAtMs,
+          intervalMs: CHECK_INTERVAL_MS
+        })
+      ) {
+        return
+      }
+
+      // Why: capture the pre-check status before overwriting it. On a transient
+      // network failure we restore it below so a previously-known update stays
+      // visible instead of being yanked for up to 24h (the throttle still
+      // advanced).
+      const wasAvailable = get().status === 'available'
+      set({ status: 'checking' })
+
+      const controller = new AbortController()
+      const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
+
+      let result
+      try {
+        result = await performUpdateCheck({
+          platform: Platform.OS === 'ios' ? 'ios' : 'android',
+          installedVersion: getInstalledVersion(),
+          installedBuildNumber: getInstalledBuildNumber(),
+          signal: controller.signal
+        })
+      } catch {
+        // Why: performUpdateCheck is designed never to reject (sources catch
+        // internally and the abort-timeout path surfaces as status 'error'), so
+        // this is a defensive net against a future regression that throws — it
+        // keeps the store from sticking on 'checking' instead of a user-visible
+        // failure to resolve.
+        result = { status: 'error' as const }
+      } finally {
+        clearTimeout(timer)
+      }
+
+      // Why: advance the throttle on any completion so a failed attempt today
+      // doesn't immediately retry on the next screen focus.
+      void AsyncStorage.setItem(LAST_CHECK_KEY, String(Date.now())).catch(() => {})
+
+      // Why: read the persisted dismissed update id fresh on every check so a
+      // "Later" tap from this or a prior session always suppresses the right
+      // version — regardless of whether hydrateAppUpdateState has run yet (it
+      // races the first check on cold start).
+      const dismissedFromStorage = await AsyncStorage.getItem(DISMISSED_KEY).catch(() => null)
+
+      set((state) => {
+        if (result.status === 'error') {
+          // Why: keep a previously-known update visible across a transient
+          // network blip instead of yanking the banner away. latestVersion /
+          // releaseNotes / updateUrl are still in state (only status was flipped
+          // to 'checking'), so restoring the status is enough.
+          if (wasAvailable) {
+            return { status: 'available' }
+          }
+          return { status: 'error' }
+        }
+        if (result.status === 'up-to-date') {
+          return {
+            status: 'up-to-date',
+            latestVersion: null,
+            latestBuildNumber: null,
+            releaseNotes: null,
+            updateUrl: null
+          }
+        }
+        // result.status === 'available'
+        // Why: suppress against EITHER source. dismiss() updates the store
+        // synchronously before its fire-and-forget persist lands, so an in-flight
+        // check reading storage could see a stale value; state.dismissedUpdateId
+        // is always current the instant the user taps "Later".
+        const resultUpdate = {
+          version: result.latestVersion,
+          buildNumber: result.latestBuildNumber,
+          updateUrl: result.updateUrl
+        }
+        const suppress =
+          isUpdateDismissed(dismissedFromStorage, resultUpdate) ||
+          isUpdateDismissed(state.dismissedUpdateId, resultUpdate)
+        if (suppress) {
+          return {
+            status: 'up-to-date',
+            latestVersion: null,
+            latestBuildNumber: null,
+            releaseNotes: null,
+            updateUrl: null
+          }
+        }
+        return {
+          status: 'available',
+          latestVersion: result.latestVersion,
+          latestBuildNumber: result.latestBuildNumber ?? null,
+          releaseNotes: result.releaseNotes ?? null,
+          updateUrl: result.updateUrl ?? null
+        }
       })
-    } catch {
-      // Why: performUpdateCheck is designed never to reject (sources catch
-      // internally and the abort-timeout path surfaces as status 'error'), so
-      // this is a defensive net against a future regression that throws — it
-      // keeps the store from sticking on 'checking' instead of a user-visible
-      // failure to resolve.
-      result = { status: 'error' as const }
     } finally {
-      clearTimeout(timer)
+      updateCheckInFlight = false
     }
-
-    // Why: advance the throttle on any completion so a failed attempt today
-    // doesn't immediately retry on the next screen focus.
-    void AsyncStorage.setItem(LAST_CHECK_KEY, String(Date.now())).catch(() => {})
-
-    // Why: read the persisted dismissed update id fresh on every check so a
-    // "Later" tap from this or a prior session always suppresses the right
-    // version — regardless of whether hydrateAppUpdateState has run yet (it
-    // races the first check on cold start).
-    const dismissedFromStorage = await AsyncStorage.getItem(DISMISSED_KEY).catch(() => null)
-
-    set((state) => {
-      if (result.status === 'error') {
-        // Why: keep a previously-known update visible across a transient
-        // network blip instead of yanking the banner away. latestVersion /
-        // releaseNotes / updateUrl are still in state (only status was flipped
-        // to 'checking'), so restoring the status is enough.
-        if (wasAvailable) {
-          return { status: 'available' }
-        }
-        return { status: 'error' }
-      }
-      if (result.status === 'up-to-date') {
-        return {
-          status: 'up-to-date',
-          latestVersion: null,
-          latestBuildNumber: null,
-          releaseNotes: null,
-          updateUrl: null
-        }
-      }
-      // result.status === 'available'
-      // Why: suppress against EITHER source. dismiss() updates the store
-      // synchronously before its fire-and-forget persist lands, so an in-flight
-      // check reading storage could see a stale value; state.dismissedUpdateId
-      // is always current the instant the user taps "Later".
-      const resultUpdate = {
-        version: result.latestVersion,
-        buildNumber: result.latestBuildNumber,
-        updateUrl: result.updateUrl
-      }
-      const suppress =
-        isUpdateDismissed(dismissedFromStorage, resultUpdate) ||
-        isUpdateDismissed(state.dismissedUpdateId, resultUpdate)
-      if (suppress) {
-        return {
-          status: 'up-to-date',
-          latestVersion: null,
-          latestBuildNumber: null,
-          releaseNotes: null,
-          updateUrl: null
-        }
-      }
-      return {
-        status: 'available',
-        latestVersion: result.latestVersion,
-        latestBuildNumber: result.latestBuildNumber ?? null,
-        releaseNotes: result.releaseNotes ?? null,
-        updateUrl: result.updateUrl ?? null
-      }
-    })
   },
 
   dismiss: async () => {

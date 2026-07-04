@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
     inputs:
       bump_patch_version:
-        description: 'Bump the iOS marketing version patch number before release. Tick this after a version has shipped to the App Store (the release fails fast if the current version''s train is already closed).'
+        description: "Bump the iOS marketing version patch number before release. Tick this after a version has shipped to the App Store (the release fails fast if the current version's train is already closed)."
         required: false
         default: false
         type: boolean
@@ -171,11 +171,13 @@ jobs:
         uses: actions/checkout@v6
         with:
           ref: main
+          persist-credentials: true
 
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
           node-version: 24
+          package-manager-cache: false
 
       - name: Bump latest-version.json
         # Why: advance mobile/latest-version.json on main so installed apps can
