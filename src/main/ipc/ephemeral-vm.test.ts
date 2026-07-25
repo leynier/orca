@@ -12,14 +12,16 @@ const {
   getPathMock,
   connectRuntimeOwnedSshTargetMock,
   disconnectRuntimeOwnedSshTargetMock,
-  removeRuntimeOwnedSshTargetMock
+  removeRuntimeOwnedSshTargetMock,
+  invalidateRuntimeEnvironmentTransportMock
 } = vi.hoisted(() => ({
   handleMock: vi.fn(),
   removeHandlerMock: vi.fn(),
   getPathMock: vi.fn(),
   connectRuntimeOwnedSshTargetMock: vi.fn(),
   disconnectRuntimeOwnedSshTargetMock: vi.fn(),
-  removeRuntimeOwnedSshTargetMock: vi.fn()
+  removeRuntimeOwnedSshTargetMock: vi.fn(),
+  invalidateRuntimeEnvironmentTransportMock: vi.fn()
 }))
 
 vi.mock('electron', () => ({
@@ -36,6 +38,10 @@ vi.mock('../ephemeral-vm-runtime-ssh', () => ({
   connectRuntimeOwnedSshTarget: connectRuntimeOwnedSshTargetMock,
   disconnectRuntimeOwnedSshTarget: disconnectRuntimeOwnedSshTargetMock,
   removeRuntimeOwnedSshTarget: removeRuntimeOwnedSshTargetMock
+}))
+
+vi.mock('./runtime-environments', () => ({
+  invalidateRuntimeEnvironmentTransport: invalidateRuntimeEnvironmentTransportMock
 }))
 
 import { registerEphemeralVmHandlers } from './ephemeral-vm'
@@ -71,9 +77,14 @@ function makeStore(repoPath: string) {
     badgeColor: '#000',
     addedAt: 0
   }
+  let activeRuntimeEnvironmentId: string | null = null
   return {
     getRepo: vi.fn((repoId: string) => (repoId === 'repo-1' ? repo : null)),
-    getRepos: vi.fn(() => [repo])
+    getRepos: vi.fn(() => [repo]),
+    getSettings: vi.fn(() => ({ activeRuntimeEnvironmentId })),
+    updateSettings: vi.fn((updates: { activeRuntimeEnvironmentId: string | null }) => {
+      activeRuntimeEnvironmentId = updates.activeRuntimeEnvironmentId
+    })
   }
 }
 
@@ -93,6 +104,7 @@ describe('registerEphemeralVmHandlers', () => {
     connectRuntimeOwnedSshTargetMock.mockReset()
     disconnectRuntimeOwnedSshTargetMock.mockReset()
     removeRuntimeOwnedSshTargetMock.mockReset()
+    invalidateRuntimeEnvironmentTransportMock.mockReset()
     connectRuntimeOwnedSshTargetMock.mockResolvedValue({
       targetId: 'runtime-ssh-orca-instance-1',
       target: {
@@ -129,7 +141,8 @@ describe('registerEphemeralVmHandlers', () => {
       ].join('\n')
     )
 
-    registerEphemeralVmHandlers(makeStore(repoPath) as never)
+    const store = makeStore(repoPath)
+    registerEphemeralVmHandlers(store as never)
     const result = await handlers.get('ephemeralVm:listRecipes')?.(null, {
       repoId: 'repo-1'
     } as never)
@@ -163,7 +176,8 @@ describe('registerEphemeralVmHandlers', () => {
       ].join('\n')
     )
 
-    registerEphemeralVmHandlers(makeStore(repoPath) as never)
+    const store = makeStore(repoPath)
+    registerEphemeralVmHandlers(store as never)
     const result = await handlers.get('ephemeralVm:listRecipeCatalog')?.(null, undefined as never)
 
     expect(result).toEqual([
@@ -212,7 +226,8 @@ describe('registerEphemeralVmHandlers', () => {
       ].join('\n')
     )
 
-    registerEphemeralVmHandlers(makeStore(repoPath) as never)
+    const store = makeStore(repoPath)
+    registerEphemeralVmHandlers(store as never)
     const result = (await handlers.get('ephemeralVm:provision')?.(null, {
       repoId: 'repo-1',
       recipeId: 'cloud-sandbox',
@@ -253,6 +268,15 @@ describe('registerEphemeralVmHandlers', () => {
         workspaceId: 'repo-1::/workspace/repo/worktree'
       })
     )
+
+    store.updateSettings({ activeRuntimeEnvironmentId: result.environment!.id })
+    const cleaned = await handlers.get('ephemeralVm:cleanup')?.(null, {
+      runtimeId: result.runtime?.id
+    } as never)
+    expect(cleaned).toEqual(expect.objectContaining({ status: 'cleaned' }))
+    expect(listEnvironments(userDataPath)).toEqual([])
+    expect(store.getSettings().activeRuntimeEnvironmentId).toBe(result.environment!.id)
+    expect(store.updateSettings).toHaveBeenCalledTimes(1)
   })
 
   it('provisions an ssh recipe without creating a runtime environment', async () => {
@@ -474,6 +498,10 @@ describe('registerEphemeralVmHandlers', () => {
     expect(suspended).toEqual(expect.objectContaining({ status: 'suspended' }))
     expect(readFileSync(join(repoPath, 'suspend-mode.txt'), 'utf8')).toBe('suspend')
 
+    invalidateRuntimeEnvironmentTransportMock.mockImplementationOnce((environmentId: string) => {
+      const environment = listEnvironments(userDataPath).find((entry) => entry.id === environmentId)
+      expect(environment?.endpoints[0]?.endpoint).toBe('wss://resumed.example.com')
+    })
     const resumed = await handlers.get('ephemeralVm:resumeWorkspace')?.(null, {
       workspaceId: 'workspace-1'
     } as never)
@@ -488,6 +516,9 @@ describe('registerEphemeralVmHandlers', () => {
       (entry) => entry.id === provisioned.environment.id
     )
     expect(environment?.endpoints[0]?.endpoint).toBe('wss://resumed.example.com')
+    expect(invalidateRuntimeEnvironmentTransportMock).toHaveBeenCalledWith(
+      provisioned.environment.id
+    )
   })
 
   it('returns a copyable cleanup command for a persisted runtime', async () => {

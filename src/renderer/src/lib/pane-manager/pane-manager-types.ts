@@ -27,7 +27,25 @@ export type PaneSpawnHints = {
 export type ClosedPaneInfo = {
   paneId: number
   leafId: TerminalLeafId
+  reason?: 'close' | 'detach'
 }
+
+export type PaneExternalDropTarget = {
+  id: string
+  rect: DOMRect
+  overlayKind?: 'area' | 'insertion'
+}
+
+export type PaneExternalDropResolver = (args: {
+  sourcePaneId: number
+  clientX: number
+  clientY: number
+}) => PaneExternalDropTarget | null
+
+export type PaneExternalDropHandler = (
+  sourcePaneId: number,
+  target: PaneExternalDropTarget
+) => boolean
 
 export type PaneManagerOptions = {
   onPaneCreated?: (pane: ManagedPane, spawnHints?: PaneSpawnHints) => void | Promise<void>
@@ -37,6 +55,8 @@ export type PaneManagerOptions = {
   /** Why: Electron webviews can steal pointer streams from renderer-owned
    *  pane drags unless callers temporarily put them in pointer passthrough. */
   onPaneDragActiveChange?: (active: boolean) => void
+  resolveExternalPaneDropTarget?: PaneExternalDropResolver
+  onExternalPaneDrop?: PaneExternalDropHandler
   terminalOptions?: (paneId: number) => Partial<ITerminalOptions>
   terminalTuiScrollSensitivity?: () => number | undefined
   onLinkClick?: (event: MouseEvent | undefined, url: string) => void
@@ -104,6 +124,8 @@ export type ScrollState = {
   viewportY: number
   baseY: number
   firstVisibleLineMarker?: IMarker
+  firstVisibleLogicalLineMarker?: IMarker
+  firstVisibleLogicalCellOffset?: number
 }
 
 export type ManagedPaneInternal = {
@@ -123,6 +145,9 @@ export type ManagedPaneInternal = {
   // value means "currently disabled".
   ligaturesAddon: LigaturesAddon | null
   fitResizeObserver: ResizeObserver | null
+  // Why: fit-element pixel size at the last successful fit; the reveal fit compares
+  // against it to tell a real hidden-time resize from a transient cell-metric wobble.
+  lastFitClientSize?: { width: number; height: number }
   // Stored so disposePane() can cancel the first post-open fit if a pane closes before paint.
   pendingInitialFitRafId?: number | null
   // Stored so disposePane() can cancel the post-WebGL-teardown refresh frame.
@@ -141,6 +166,12 @@ export type ManagedPaneInternal = {
   focusClassSyncCleanup?: (() => void) | null
   // Stored so disposePane() can remove user-scroll intent listeners.
   terminalScrollIntentDisposable?: IDisposable | null
+  // Stored so disposePane() can detach the streamed-output hover-cache reset
+  // that keeps freshly printed links linkifiable without a scroll.
+  linkifierHoverResetDisposable?: IDisposable | null
+  // Stored so disposePane() can deregister the joiner; terminal.dispose()
+  // does not remove registered character joiners.
+  arabicShapingJoinerCleanup?: (() => void) | null
   // Why: splitPane reparents DOM; its delayed restore owns scroll until the
   // browser settles, so intermediate fits must not compete with it.
   pendingSplitScrollState: ScrollState | null
