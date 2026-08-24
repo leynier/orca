@@ -8,10 +8,18 @@ import type { Repo } from '../../shared/repo-types'
 import type { Project } from '../../shared/project-types'
 import type { GlobalSettings } from '../../shared/global-settings-types'
 import type { Worktree } from '../../shared/worktree/types'
+import type { RuntimeStatus } from '../../shared/runtime-types'
+import type { WorkspaceSessionState } from '../../shared/workspace-session-state-types'
 
 export type GpuixShellApi = {
   app: {
     getIdentity: () => Promise<AppIdentity>
+  }
+  runtime: {
+    getStatus: () => Promise<RuntimeStatus>
+  }
+  session: {
+    get: (hostId?: string | null) => Promise<WorkspaceSessionState>
   }
   settings: {
     get: () => Promise<GlobalSettings>
@@ -51,6 +59,12 @@ export function createGpuixShellApi(): GpuixShellApi {
   return {
     app: {
       getIdentity: () => ipcRenderer.invoke('app:getIdentity') as Promise<AppIdentity>
+    },
+    runtime: {
+      getStatus: () => ipcRenderer.invoke('runtime:getStatus') as Promise<RuntimeStatus>
+    },
+    session: {
+      get: (hostId) => ipcRenderer.invoke('session:get', hostId) as Promise<WorkspaceSessionState>
     },
     settings: {
       get: () => ipcRenderer.invoke('settings:get') as Promise<GlobalSettings>,

@@ -19,4 +19,11 @@ describe('gpuix electron shim', () => {
     gpuixWebContents.send('test:to-renderer')
     expect(rendererEvents).toEqual(['renderer'])
   })
+
+  it('routes sendSync through on listeners with returnValue', () => {
+    ipcMain.on('test:sync', (event) => {
+      event.returnValue = 'sync-ok'
+    })
+    expect(ipcRenderer.sendSync('test:sync')).toBe('sync-ok')
+  })
 })

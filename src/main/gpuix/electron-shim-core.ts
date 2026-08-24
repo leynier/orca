@@ -14,8 +14,11 @@ const mainEventListeners = new Map<string, Set<IpcListener>>()
 const rendererEventListeners = new Map<string, Set<IpcListener>>()
 const webContentsEmitter = new EventEmitter()
 
+const gpuixMainFrame: { parent: typeof gpuixWebContents } = { parent: null as never }
+
 export const gpuixWebContents: GpuixWebContents = {
   id: 1,
+  mainFrame: gpuixMainFrame,
   send(channel: string, ...args: unknown[]) {
     const listeners = rendererEventListeners.get(channel)
     if (!listeners) {
@@ -35,13 +38,15 @@ export const gpuixWebContents: GpuixWebContents = {
   }
 }
 
+gpuixMainFrame.parent = gpuixWebContents
+
 /** PTY handlers wait for did-finish-load before arming delivery gates. */
 export function emitGpuixRendererDidFinishLoad(): void {
   webContentsEmitter.emit('did-finish-load')
 }
 
 function makeInvokeEvent(): IpcMainEvent {
-  return { sender: gpuixWebContents, frameId: 0 }
+  return { sender: gpuixWebContents, frameId: 0, senderFrame: gpuixWebContents.mainFrame }
 }
 
 export const ipcMain = {
@@ -88,10 +93,18 @@ export const ipcRenderer = {
   },
   sendSync(channel: string, ...args: unknown[]): unknown {
     const handler = invokeHandlers.get(channel)
-    if (!handler) {
+    if (handler) {
+      return handler(makeInvokeEvent(), ...args)
+    }
+    const event = makeInvokeEvent()
+    const listeners = mainEventListeners.get(channel)
+    if (!listeners) {
       throw new Error(`No IPC handler registered for channel: ${channel}`)
     }
-    return handler(makeInvokeEvent(), ...args)
+    for (const listener of listeners) {
+      listener(event, ...args)
+    }
+    return event.returnValue
   },
   on(channel: string, listener: IpcListener): void {
     const set = rendererEventListeners.get(channel) ?? new Set()

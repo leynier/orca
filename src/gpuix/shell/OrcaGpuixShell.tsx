@@ -3,6 +3,7 @@ import type { EventPayload } from '@gpuix/native'
 import type { AppIdentity } from '../../shared/app-identity'
 import type { Repo } from '../../shared/repo-types'
 import type { Worktree } from '../../shared/worktree/types'
+import type { RuntimeStatus } from '../../shared/runtime-types'
 import type { GpuixShellApi } from '../gpuix-shell-api'
 import { gpuixKeyEventToTerminalInput } from './gpuix-terminal-key-input'
 
@@ -21,6 +22,7 @@ export function OrcaGpuixShell({ version }: OrcaGpuixShellProps): React.JSX.Elem
   const [selectedRepoId, setSelectedRepoId] = useState<string | null>(null)
   const [selectedWorktreeId, setSelectedWorktreeId] = useState<string | null>(null)
   const [worktreeCount, setWorktreeCount] = useState<number | null>(null)
+  const [runtimeStatus, setRuntimeStatus] = useState<RuntimeStatus | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [terminalOutput, setTerminalOutput] = useState('')
   const [ptyId, setPtyId] = useState<string | null>(null)
@@ -68,6 +70,11 @@ export function OrcaGpuixShell({ version }: OrcaGpuixShellProps): React.JSX.Elem
       .catch((cause: unknown) => {
         setError(cause instanceof Error ? cause.message : String(cause))
       })
+
+    void api.runtime
+      .getStatus()
+      .then((status) => setRuntimeStatus(status))
+      .catch(() => setRuntimeStatus(null))
 
     loadRepos()
     void refreshWorktrees(api, null)
@@ -289,6 +296,14 @@ export function OrcaGpuixShell({ version }: OrcaGpuixShellProps): React.JSX.Elem
           <StatusCard
             label="Worktrees"
             value={worktreeCount === null ? '…' : String(worktreeCount)}
+          />
+          <StatusCard
+            label="Runtime"
+            value={
+              runtimeStatus
+                ? `${runtimeStatus.graphStatus} · ${runtimeStatus.liveTabCount} tabs`
+                : '…'
+            }
           />
           <StatusCard label="PTY" value={ptyId ?? 'none'} />
         </div>

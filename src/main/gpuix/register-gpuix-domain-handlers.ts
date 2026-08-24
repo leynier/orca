@@ -6,6 +6,8 @@ import { registerRepoHandlers, setRepoRemoteClientNotifier } from '../ipc/repos'
 import { registerWorktreeHandlers } from '../ipc/worktrees'
 import { registerShellHandlers } from '../ipc/shell'
 import { registerWorkspaceCleanupHandlers } from '../ipc/workspace-cleanup'
+import { registerSessionHandlers } from '../ipc/session'
+import { registerRuntimeHandlers } from '../ipc/runtime'
 import { registerGpuixSettingsHandlers } from './register-gpuix-settings-handlers'
 import {
   scheduleWorktreeBaseDirectoryWatcherSync,
@@ -29,5 +31,7 @@ export function registerGpuixDomainHandlers(
   startFolderRepoGitUpgradeWatch(store, mainWindow)
   registerGpuixSettingsHandlers(store)
   registerShellHandlers(store)
+  registerSessionHandlers(store)
+  registerRuntimeHandlers(runtime)
   registerWorkspaceCleanupHandlers(store, { runtime, getLocalPtyProvider })
 }

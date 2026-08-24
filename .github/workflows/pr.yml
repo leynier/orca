@@ -165,6 +165,31 @@ jobs:
       - name: Verify macOS entitlements
         run: pnpm verify:macos-entitlements
 
+  gpuix:
+    name: gpuix build
+    needs: [code_paths]
+    if: needs.code_paths.outputs.should_run == 'true'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - uses: ./.github/actions/install-node-dependencies
+        with:
+          native-runtime: node
+
+      - name: Install GPUIX Linux dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq libxkbcommon-x11-0 libxkbcommon0 libvulkan1 mesa-vulkan-drivers
+
+      - name: Build and verify GPUIX host
+        run: pnpm run build:gpuix && pnpm run verify:gpuix-build
+
   root_directory_guard:
     name: root directory guard
     runs-on: ubuntu-latest
@@ -764,6 +789,7 @@ jobs:
     needs:
       - code_paths
       - static_analysis
+      - gpuix
       - root_directory_guard
       - typecheck
       - git_compatibility
@@ -789,6 +815,7 @@ jobs:
           CODE_PATHS: ${{ needs.code_paths.result }}
           SHOULD_RUN: ${{ needs.code_paths.outputs.should_run }}
           STATIC_ANALYSIS: ${{ needs.static_analysis.result }}
+          GPUIX: ${{ needs.gpuix.result }}
           ROOT_DIRECTORY_GUARD: ${{ needs.root_directory_guard.result }}
           TYPECHECK: ${{ needs.typecheck.result }}
           GIT_COMPATIBILITY: ${{ needs.git_compatibility.result }}
@@ -809,6 +836,7 @@ jobs:
             fi
             for result in \
               "$STATIC_ANALYSIS" \
+              "$GPUIX" \
               "$TYPECHECK" \
               "$GIT_COMPATIBILITY" \
               "$XTERM_PATCH_SYNC" \
@@ -827,6 +855,7 @@ jobs:
           for result in \
             "$CODE_PATHS" \
             "$STATIC_ANALYSIS" \
+            "$GPUIX" \
             "$ROOT_DIRECTORY_GUARD" \
             "$TYPECHECK" \
             "$GIT_COMPATIBILITY" \
