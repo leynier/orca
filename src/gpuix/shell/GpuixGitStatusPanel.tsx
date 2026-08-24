@@ -1,5 +1,5 @@
 import React from 'react'
-import type { GitStatusResult } from '../../shared/git-status-types'
+import type { GitStatusResult, GitUncommittedEntry } from '../../shared/git-status-types'
 import type { Worktree } from '../../shared/worktree/types'
 import { formatGitStatusSummary } from './gpuix-git-status-summary'
 import { gpuixShellTheme as t } from './gpuix-shell-theme'
@@ -9,13 +9,15 @@ type GpuixGitStatusPanelProps = {
   status: GitStatusResult | null
   busy: boolean
   onOpenInFileManager: (path: string) => void
+  onToggleStage: (entry: GitUncommittedEntry) => void
 }
 
 export function GpuixGitStatusPanel({
   worktree,
   status,
   busy,
-  onOpenInFileManager
+  onOpenInFileManager,
+  onToggleStage
 }: GpuixGitStatusPanelProps): React.JSX.Element | null {
   if (!worktree) {
     return null
@@ -54,12 +56,22 @@ export function GpuixGitStatusPanel({
       {entries.length > 0 ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
           {entries.map((entry) => (
-            <text
+            <div
               key={`${entry.area}:${entry.path}`}
-              style={{ fontSize: 10, color: gitStatusColor(entry.status) }}
+              tabIndex={0}
+              onClick={() => onToggleStage(entry)}
+              style={{
+                borderRadius: 4,
+                padding: 2,
+                cursor: 'pointer',
+                backgroundColor: 'transparent'
+              }}
             >
-              {entry.area} {entry.status} {entry.path}
-            </text>
+              <text style={{ fontSize: 10, color: gitStatusColor(entry.status) }}>
+                {entry.area} {entry.status} {entry.path}
+                {entry.area === 'staged' ? ' (click to unstage)' : ' (click to stage)'}
+              </text>
+            </div>
           ))}
         </div>
       ) : null}

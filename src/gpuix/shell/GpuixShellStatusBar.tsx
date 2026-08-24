@@ -8,6 +8,7 @@ type GpuixShellStatusBarProps = {
   repoCount: number
   worktreeCount: number | null
   runtimeStatus: RuntimeStatus | null
+  preflightSummary: string | null
   ptyId: string | null
 }
 
@@ -16,6 +17,7 @@ export function GpuixShellStatusBar({
   repoCount,
   worktreeCount,
   runtimeStatus,
+  preflightSummary,
   ptyId
 }: GpuixShellStatusBarProps): React.JSX.Element {
   return (
@@ -29,6 +31,7 @@ export function GpuixShellStatusBar({
           runtimeStatus ? `${runtimeStatus.graphStatus} · ${runtimeStatus.liveTabCount} tabs` : '…'
         }
       />
+      <StatusCard label="Tools" value={preflightSummary ?? '…'} />
       <StatusCard label="PTY" value={ptyId ?? 'none'} />
     </div>
   )

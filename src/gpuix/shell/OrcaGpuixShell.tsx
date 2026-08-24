@@ -4,8 +4,10 @@ import type { AppIdentity } from '../../shared/app-identity'
 import type { Repo } from '../../shared/repo-types'
 import type { Worktree } from '../../shared/worktree/types'
 import type { RuntimeStatus } from '../../shared/runtime-types'
-import type { GitStatusResult } from '../../shared/git-status-types'
+import type { GitStatusResult, GitUncommittedEntry } from '../../shared/git-status-types'
+import type { PreflightStatus } from '../../main/preflight/agent-detection'
 import type { GpuixShellApi } from '../gpuix-shell-api'
+import { formatPreflightSummary } from './gpuix-preflight-summary'
 import { GpuixGitStatusPanel } from './GpuixGitStatusPanel'
 import { GpuixShellSidebar } from './GpuixShellSidebar'
 import { GpuixShellStatusBar } from './GpuixShellStatusBar'
@@ -29,6 +31,7 @@ export function OrcaGpuixShell({ version }: OrcaGpuixShellProps): React.JSX.Elem
   const [selectedWorktreeId, setSelectedWorktreeId] = useState<string | null>(null)
   const [worktreeCount, setWorktreeCount] = useState<number | null>(null)
   const [runtimeStatus, setRuntimeStatus] = useState<RuntimeStatus | null>(null)
+  const [preflightStatus, setPreflightStatus] = useState<PreflightStatus | null>(null)
   const [gitStatus, setGitStatus] = useState<GitStatusResult | null>(null)
   const [gitStatusBusy, setGitStatusBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -88,6 +91,11 @@ export function OrcaGpuixShell({ version }: OrcaGpuixShellProps): React.JSX.Elem
       .then((status) => setRuntimeStatus(status))
       .catch(() => setRuntimeStatus(null))
 
+    void api.preflight
+      .check()
+      .then((status) => setPreflightStatus(status))
+      .catch(() => setPreflightStatus(null))
+
     loadRepos()
     void refreshWorktrees(api, null)
 
@@ -102,6 +110,7 @@ export function OrcaGpuixShell({ version }: OrcaGpuixShellProps): React.JSX.Elem
         setPtyId(result.id)
         api.pty.setActiveRendererPty(result.id, true)
         api.pty.setRendererPtyVisible(result.id, true)
+        api.pty.resize(result.id, 80, 24)
         if (result.snapshot) {
           outputRef.current = stripAnsi(result.snapshot)
           setTerminalOutput(outputRef.current)
@@ -168,6 +177,7 @@ export function OrcaGpuixShell({ version }: OrcaGpuixShellProps): React.JSX.Elem
         setPtyId(result.id)
         api.pty.setActiveRendererPty(result.id, true)
         api.pty.setRendererPtyVisible(result.id, true)
+        api.pty.resize(result.id, 80, 24)
         if (result.snapshot) {
           outputRef.current = stripAnsi(result.snapshot)
           setTerminalOutput(outputRef.current)
@@ -177,6 +187,35 @@ export function OrcaGpuixShell({ version }: OrcaGpuixShellProps): React.JSX.Elem
         setError(cause instanceof Error ? cause.message : String(cause))
       })
       .finally(() => setTerminalBusy(false))
+  }
+
+  const refreshGitStatus = useCallback(async (): Promise<void> => {
+    const api = getApi()
+    if (!api || !selectedWorktree?.path) {
+      setGitStatus(null)
+      return
+    }
+    setGitStatusBusy(true)
+    try {
+      const status = await api.git.status(selectedWorktree.path)
+      setGitStatus(status)
+    } catch {
+      setGitStatus(null)
+    } finally {
+      setGitStatusBusy(false)
+    }
+  }, [selectedWorktree])
+
+  const toggleGitStage = (entry: GitUncommittedEntry): void => {
+    const api = getApi()
+    if (!api || !selectedWorktree?.path || gitStatusBusy) {
+      return
+    }
+    const toggle =
+      entry.area === 'staged'
+        ? api.git.unstage(selectedWorktree.path, entry.path)
+        : api.git.stage(selectedWorktree.path, entry.path)
+    void toggle.then(() => refreshGitStatus())
   }
 
   const handleTerminalKeyDown = (event: EventPayload): void => {
@@ -242,6 +281,7 @@ export function OrcaGpuixShell({ version }: OrcaGpuixShellProps): React.JSX.Elem
           repoCount={repos.length}
           worktreeCount={worktreeCount}
           runtimeStatus={runtimeStatus}
+          preflightSummary={formatPreflightSummary(preflightStatus)}
           ptyId={ptyId}
         />
 
@@ -252,6 +292,7 @@ export function OrcaGpuixShell({ version }: OrcaGpuixShellProps): React.JSX.Elem
           status={gitStatus}
           busy={gitStatusBusy}
           onOpenInFileManager={openInFileManager}
+          onToggleStage={toggleGitStage}
         />
 
         <GpuixTerminalPanel output={terminalOutput} onKeyDown={handleTerminalKeyDown} />

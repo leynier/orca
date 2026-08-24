@@ -12,10 +12,14 @@ import type { RuntimeStatus } from '../../shared/runtime-types'
 import type { WorkspaceSessionState } from '../../shared/workspace-session-state-types'
 import type { GitStatusResult } from '../../shared/git-status-types'
 import type { ShellOpenLocalPathResult } from '../../shared/shell-open-types'
+import type { PreflightStatus } from '../../main/preflight/agent-detection'
 
 export type GpuixShellApi = {
   app: {
     getIdentity: () => Promise<AppIdentity>
+  }
+  preflight: {
+    check: () => Promise<PreflightStatus>
   }
   runtime: {
     getStatus: () => Promise<RuntimeStatus>
@@ -46,11 +50,14 @@ export type GpuixShellApi = {
   }
   git: {
     status: (worktreePath: string) => Promise<GitStatusResult>
+    stage: (worktreePath: string, filePath: string) => Promise<void>
+    unstage: (worktreePath: string, filePath: string) => Promise<void>
   }
   pty: {
     rendererDispatcherReady: () => void
     setActiveRendererPty: (id: string, active: boolean) => void
     setRendererPtyVisible: (id: string, visible: boolean) => void
+    resize: (id: string, cols: number, rows: number) => void
     spawn: (opts: { cols: number; rows: number; cwd?: string; command?: string }) => Promise<{
       id: string
       snapshot?: string
@@ -65,6 +72,9 @@ export function createGpuixShellApi(): GpuixShellApi {
   return {
     app: {
       getIdentity: () => ipcRenderer.invoke('app:getIdentity') as Promise<AppIdentity>
+    },
+    preflight: {
+      check: () => ipcRenderer.invoke('preflight:check') as Promise<PreflightStatus>
     },
     runtime: {
       getStatus: () => ipcRenderer.invoke('runtime:getStatus') as Promise<RuntimeStatus>
@@ -109,7 +119,11 @@ export function createGpuixShellApi(): GpuixShellApi {
     },
     git: {
       status: (worktreePath) =>
-        ipcRenderer.invoke('git:status', { worktreePath }) as Promise<GitStatusResult>
+        ipcRenderer.invoke('git:status', { worktreePath }) as Promise<GitStatusResult>,
+      stage: (worktreePath, filePath) =>
+        ipcRenderer.invoke('git:stage', { worktreePath, filePath }) as Promise<void>,
+      unstage: (worktreePath, filePath) =>
+        ipcRenderer.invoke('git:unstage', { worktreePath, filePath }) as Promise<void>
     },
     pty: {
       rendererDispatcherReady: () => {
@@ -120,6 +134,9 @@ export function createGpuixShellApi(): GpuixShellApi {
       },
       setRendererPtyVisible: (id, visible) => {
         ipcRenderer.send('pty:setRendererPtyVisible', { id, visible })
+      },
+      resize: (id, cols, rows) => {
+        ipcRenderer.send('pty:resize', { id, cols, rows })
       },
       spawn: (opts) =>
         ipcRenderer.invoke('pty:spawn', opts) as Promise<{ id: string; snapshot?: string }>,

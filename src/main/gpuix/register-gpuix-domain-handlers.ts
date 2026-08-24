@@ -8,6 +8,7 @@ import { registerShellHandlers } from '../ipc/shell'
 import { registerWorkspaceCleanupHandlers } from '../ipc/workspace-cleanup'
 import { registerSessionHandlers } from '../ipc/session'
 import { registerRuntimeHandlers } from '../ipc/runtime'
+import { registerPreflightHandlers } from '../ipc/preflight'
 import { registerGpuixSettingsHandlers } from './register-gpuix-settings-handlers'
 import { registerGpuixGitHandlers } from './register-gpuix-git-handlers'
 import {
@@ -35,5 +36,6 @@ export function registerGpuixDomainHandlers(
   registerShellHandlers(store)
   registerSessionHandlers(store)
   registerRuntimeHandlers(runtime)
+  registerPreflightHandlers()
   registerWorkspaceCleanupHandlers(store, { runtime, getLocalPtyProvider })
 }
