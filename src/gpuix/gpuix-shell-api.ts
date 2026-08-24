@@ -11,6 +11,7 @@ import type { Worktree } from '../../shared/worktree/types'
 import type { RuntimeStatus } from '../../shared/runtime-types'
 import type { WorkspaceSessionState } from '../../shared/workspace-session-state-types'
 import type { GitStatusResult } from '../../shared/git-status-types'
+import type { ShellOpenLocalPathResult } from '../../shared/shell-open-types'
 
 export type GpuixShellApi = {
   app: {
@@ -41,6 +42,7 @@ export type GpuixShellApi = {
   }
   shell: {
     openUrl: (url: string) => Promise<void>
+    openInFileManager: (path: string) => Promise<ShellOpenLocalPathResult>
   }
   git: {
     status: (worktreePath: string) => Promise<GitStatusResult>
@@ -101,7 +103,9 @@ export function createGpuixShellApi(): GpuixShellApi {
       }
     },
     shell: {
-      openUrl: (url) => ipcRenderer.invoke('shell:openUrl', url) as Promise<void>
+      openUrl: (url) => ipcRenderer.invoke('shell:openUrl', url) as Promise<void>,
+      openInFileManager: (path) =>
+        ipcRenderer.invoke('shell:openInFileManager', path) as Promise<ShellOpenLocalPathResult>
     },
     git: {
       status: (worktreePath) =>
