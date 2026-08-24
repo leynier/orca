@@ -10,6 +10,7 @@ import type { GlobalSettings } from '../../shared/global-settings-types'
 import type { Worktree } from '../../shared/worktree/types'
 import type { RuntimeStatus } from '../../shared/runtime-types'
 import type { WorkspaceSessionState } from '../../shared/workspace-session-state-types'
+import type { GitStatusResult } from '../../shared/git-status-types'
 
 export type GpuixShellApi = {
   app: {
@@ -40,6 +41,9 @@ export type GpuixShellApi = {
   }
   shell: {
     openUrl: (url: string) => Promise<void>
+  }
+  git: {
+    status: (worktreePath: string) => Promise<GitStatusResult>
   }
   pty: {
     rendererDispatcherReady: () => void
@@ -98,6 +102,10 @@ export function createGpuixShellApi(): GpuixShellApi {
     },
     shell: {
       openUrl: (url) => ipcRenderer.invoke('shell:openUrl', url) as Promise<void>
+    },
+    git: {
+      status: (worktreePath) =>
+        ipcRenderer.invoke('git:status', { worktreePath }) as Promise<GitStatusResult>
     },
     pty: {
       rendererDispatcherReady: () => {

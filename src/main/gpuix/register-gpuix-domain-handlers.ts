@@ -9,6 +9,7 @@ import { registerWorkspaceCleanupHandlers } from '../ipc/workspace-cleanup'
 import { registerSessionHandlers } from '../ipc/session'
 import { registerRuntimeHandlers } from '../ipc/runtime'
 import { registerGpuixSettingsHandlers } from './register-gpuix-settings-handlers'
+import { registerGpuixGitHandlers } from './register-gpuix-git-handlers'
 import {
   scheduleWorktreeBaseDirectoryWatcherSync,
   setWorktreeBaseDirectoryWatcherSyncContext
@@ -30,6 +31,7 @@ export function registerGpuixDomainHandlers(
   scheduleWorktreeBaseDirectoryWatcherSync(store, mainWindow)
   startFolderRepoGitUpgradeWatch(store, mainWindow)
   registerGpuixSettingsHandlers(store)
+  registerGpuixGitHandlers(store)
   registerShellHandlers(store)
   registerSessionHandlers(store)
   registerRuntimeHandlers(runtime)

@@ -4,6 +4,7 @@ import type { AppIdentity } from '../../shared/app-identity'
 import type { Repo } from '../../shared/repo-types'
 import type { Worktree } from '../../shared/worktree/types'
 import type { RuntimeStatus } from '../../shared/runtime-types'
+import type { GitStatusResult } from '../../shared/git-status-types'
 import type { GpuixShellApi } from '../gpuix-shell-api'
 import { gpuixKeyEventToTerminalInput } from './gpuix-terminal-key-input'
 
@@ -23,6 +24,8 @@ export function OrcaGpuixShell({ version }: OrcaGpuixShellProps): React.JSX.Elem
   const [selectedWorktreeId, setSelectedWorktreeId] = useState<string | null>(null)
   const [worktreeCount, setWorktreeCount] = useState<number | null>(null)
   const [runtimeStatus, setRuntimeStatus] = useState<RuntimeStatus | null>(null)
+  const [gitStatus, setGitStatus] = useState<GitStatusResult | null>(null)
+  const [gitStatusBusy, setGitStatusBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [terminalOutput, setTerminalOutput] = useState('')
   const [ptyId, setPtyId] = useState<string | null>(null)
@@ -114,6 +117,25 @@ export function OrcaGpuixShell({ version }: OrcaGpuixShellProps): React.JSX.Elem
     }
     void refreshWorktrees(api, selectedRepoId)
   }, [selectedRepoId, refreshWorktrees])
+
+  useEffect(() => {
+    const api = getApi()
+    if (!api || !selectedWorktreeId) {
+      setGitStatus(null)
+      return
+    }
+    const worktree = worktrees.find((row) => row.id === selectedWorktreeId)
+    if (!worktree?.path) {
+      setGitStatus(null)
+      return
+    }
+    setGitStatusBusy(true)
+    void api.git
+      .status(worktree.path)
+      .then((status) => setGitStatus(status))
+      .catch(() => setGitStatus(null))
+      .finally(() => setGitStatusBusy(false))
+  }, [selectedWorktreeId, worktrees])
 
   useEffect(() => {
     const api = getApi()
@@ -310,6 +332,23 @@ export function OrcaGpuixShell({ version }: OrcaGpuixShellProps): React.JSX.Elem
 
         {error ? <text style={{ color: '#fca5a5', fontSize: 12 }}>Error: {error}</text> : null}
 
+        {selectedWorktreeId ? (
+          <div
+            style={{
+              display: 'flex',
+              flexDirection: 'row',
+              gap: 16,
+              backgroundColor: '#161b22',
+              borderRadius: 8,
+              padding: 10
+            }}
+          >
+            <text style={{ fontSize: 11, color: '#9aa3b2' }}>
+              Git: {gitStatusBusy ? 'loading…' : formatGitStatusSummary(gitStatus)}
+            </text>
+          </div>
+        ) : null}
+
         <div
           tabIndex={0}
           autoFocus
@@ -355,6 +394,17 @@ function StatusCard({ label, value }: { label: string; value: string }): React.J
       <text style={{ fontSize: 13, fontWeight: 500 }}>{value}</text>
     </div>
   )
+}
+
+function formatGitStatusSummary(status: GitStatusResult | null): string {
+  if (!status) {
+    return 'no status'
+  }
+  const branch = status.branch ?? 'detached'
+  const changes = status.entries.length
+  const upstream = status.upstreamStatus
+  const sync = upstream?.hasUpstream ? ` ↑${upstream.ahead} ↓${upstream.behind}` : ''
+  return `${branch} · ${changes} change${changes === 1 ? '' : 's'}${sync}`
 }
 
 function stripAnsi(text: string): string {
