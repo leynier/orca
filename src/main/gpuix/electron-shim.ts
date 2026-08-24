@@ -102,9 +102,18 @@ export const session = {
   }
 }
 
+export const webContents = {
+  fromId(id: number): typeof gpuixWebContents | undefined {
+    return id === gpuixWebContents.id ? gpuixWebContents : undefined
+  },
+  getAllWebContents(): (typeof gpuixWebContents)[] {
+    return [gpuixWebContents]
+  }
+}
+
 export const BrowserWindow = class {
-  static fromWebContents(): undefined {
-    return undefined
+  static fromWebContents(contents: typeof gpuixWebContents): BrowserWindow | undefined {
+    return contents === gpuixWebContents ? new BrowserWindow() : undefined
   }
   static fromId(): undefined {
     return undefined
@@ -237,6 +246,7 @@ export const electronShim = {
   ipcMain,
   ipcRenderer,
   BrowserWindow,
+  webContents,
   dialog,
   shell,
   Notification,

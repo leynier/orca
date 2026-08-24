@@ -1,6 +1,7 @@
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import type { AppIdentity } from '../../shared/app-identity'
 import type { Repo } from '../../shared/repo-types'
+import type { Worktree } from '../../shared/worktree/types'
 import type { GpuixShellApi } from '../gpuix-shell-api'
 
 type OrcaGpuixShellProps = {
@@ -14,12 +15,32 @@ function getApi(): GpuixShellApi | null {
 export function OrcaGpuixShell({ version }: OrcaGpuixShellProps): React.JSX.Element {
   const [identity, setIdentity] = useState<AppIdentity | null>(null)
   const [repos, setRepos] = useState<Repo[]>([])
+  const [worktrees, setWorktrees] = useState<Worktree[]>([])
+  const [selectedRepoId, setSelectedRepoId] = useState<string | null>(null)
+  const [selectedWorktreeId, setSelectedWorktreeId] = useState<string | null>(null)
   const [worktreeCount, setWorktreeCount] = useState<number | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [terminalOutput, setTerminalOutput] = useState('')
   const [ptyId, setPtyId] = useState<string | null>(null)
   const [terminalBusy, setTerminalBusy] = useState(false)
   const outputRef = useRef('')
+  const selectedRepoIdRef = useRef<string | null>(null)
+
+  useEffect(() => {
+    selectedRepoIdRef.current = selectedRepoId
+  }, [selectedRepoId])
+
+  const refreshWorktrees = useCallback(async (api: GpuixShellApi, repoId: string | null) => {
+    try {
+      const rows = repoId ? await api.worktrees.list(repoId) : await api.worktrees.listAll()
+      setWorktrees(rows)
+      const summary = await api.worktrees.metaSummary()
+      setWorktreeCount(summary.count)
+    } catch {
+      setWorktrees([])
+      setWorktreeCount(0)
+    }
+  }, [])
 
   useEffect(() => {
     const api = getApi()
@@ -28,20 +49,31 @@ export function OrcaGpuixShell({ version }: OrcaGpuixShellProps): React.JSX.Elem
       return
     }
     api.pty.rendererDispatcherReady()
+
+    const loadRepos = (): void => {
+      void api.repos
+        .list()
+        .then((value) => {
+          setRepos(value)
+          setSelectedRepoId((current) => current ?? value[0]?.id ?? null)
+        })
+        .catch(() => setRepos([]))
+    }
+
     void api.app
       .getIdentity()
       .then((value) => setIdentity(value))
       .catch((cause: unknown) => {
         setError(cause instanceof Error ? cause.message : String(cause))
       })
-    void api.repos
-      .list()
-      .then((value) => setRepos(value))
-      .catch(() => setRepos([]))
-    void api.worktrees
-      .metaSummary()
-      .then((summary) => setWorktreeCount(summary.count))
-      .catch(() => setWorktreeCount(0))
+
+    loadRepos()
+    void refreshWorktrees(api, null)
+
+    const unsubRepos = api.repos.onChanged(loadRepos)
+    const unsubWorktrees = api.worktrees.onChanged(() => {
+      void refreshWorktrees(api, selectedRepoIdRef.current)
+    })
 
     void api.pty
       .spawn({ cols: 80, rows: 24, command: '/bin/bash -lc "echo Orca GPUIX terminal ready"' })
@@ -57,7 +89,22 @@ export function OrcaGpuixShell({ version }: OrcaGpuixShellProps): React.JSX.Elem
       .catch((cause: unknown) => {
         setError(cause instanceof Error ? cause.message : String(cause))
       })
-  }, [])
+
+    return () => {
+      unsubRepos()
+      unsubWorktrees()
+    }
+    // Mount-only: terminal auto-spawn and IPC subscriptions should not re-run on repo selection.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional mount gate
+  }, [refreshWorktrees])
+
+  useEffect(() => {
+    const api = getApi()
+    if (!api) {
+      return
+    }
+    void refreshWorktrees(api, selectedRepoId)
+  }, [selectedRepoId, refreshWorktrees])
 
   useEffect(() => {
     const api = getApi()
@@ -73,7 +120,7 @@ export function OrcaGpuixShell({ version }: OrcaGpuixShellProps): React.JSX.Elem
     })
   }, [ptyId])
 
-  const spawnTerminal = (): void => {
+  const spawnTerminal = (cwd?: string): void => {
     const api = getApi()
     if (!api || terminalBusy) {
       return
@@ -82,7 +129,7 @@ export function OrcaGpuixShell({ version }: OrcaGpuixShellProps): React.JSX.Elem
     outputRef.current = ''
     setTerminalOutput('')
     void api.pty
-      .spawn({ cols: 80, rows: 24, command: '/bin/bash' })
+      .spawn({ cols: 80, rows: 24, cwd, command: '/bin/bash' })
       .then((result) => {
         setPtyId(result.id)
         api.pty.setActiveRendererPty(result.id, true)
@@ -97,6 +144,10 @@ export function OrcaGpuixShell({ version }: OrcaGpuixShellProps): React.JSX.Elem
       })
       .finally(() => setTerminalBusy(false))
   }
+
+  const repoWorktrees = selectedRepoId
+    ? worktrees.filter((row) => row.repoId === selectedRepoId)
+    : worktrees
 
   return (
     <div
@@ -113,31 +164,89 @@ export function OrcaGpuixShell({ version }: OrcaGpuixShellProps): React.JSX.Elem
         style={{
           display: 'flex',
           flexDirection: 'column',
-          width: 220,
+          width: 240,
           borderRightWidth: 1,
           borderRightColor: '#2a2f3a',
           borderRightStyle: 'solid',
           padding: 12,
-          gap: 8
+          gap: 8,
+          minHeight: 0
         }}
       >
         <text style={{ fontSize: 16, fontWeight: 600 }}>Orca</text>
         <text style={{ fontSize: 11, color: '#9aa3b2' }}>GPUIX · v{version}</text>
+
         <text style={{ fontSize: 12, color: '#7dd3fc', marginTop: 8 }}>Repositories</text>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flexGrow: 1 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
           {repos.length === 0 ? (
             <text style={{ fontSize: 11, color: '#9aa3b2' }}>No repos yet</text>
           ) : (
-            repos.slice(0, 12).map((repo) => (
-              <text key={repo.id} style={{ fontSize: 11, color: '#c4cad4' }}>
-                {repo.displayName || repo.id}
-              </text>
+            repos.slice(0, 8).map((repo) => (
+              <div
+                key={repo.id}
+                tabIndex={0}
+                onClick={() => {
+                  setSelectedRepoId(repo.id)
+                  setSelectedWorktreeId(null)
+                }}
+                style={{
+                  backgroundColor: selectedRepoId === repo.id ? '#1e293b' : 'transparent',
+                  borderRadius: 4,
+                  padding: 4,
+                  cursor: 'pointer'
+                }}
+              >
+                <text style={{ fontSize: 11, color: '#c4cad4' }}>
+                  {repo.displayName || repo.id}
+                </text>
+              </div>
             ))
           )}
         </div>
+
+        <text style={{ fontSize: 12, color: '#7dd3fc', marginTop: 8 }}>Worktrees</text>
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 4,
+            flexGrow: 1,
+            minHeight: 0,
+            overflow: 'scroll'
+          }}
+        >
+          {repoWorktrees.length === 0 ? (
+            <text style={{ fontSize: 11, color: '#9aa3b2' }}>No worktrees</text>
+          ) : (
+            repoWorktrees.slice(0, 24).map((worktree) => (
+              <div
+                key={worktree.id}
+                tabIndex={0}
+                onClick={() => {
+                  setSelectedWorktreeId(worktree.id)
+                  spawnTerminal(worktree.path)
+                }}
+                style={{
+                  backgroundColor: selectedWorktreeId === worktree.id ? '#1e293b' : 'transparent',
+                  borderRadius: 4,
+                  padding: 4,
+                  cursor: 'pointer'
+                }}
+              >
+                <text style={{ fontSize: 11, color: '#e8eaed' }}>
+                  {worktree.displayName || worktree.branch || worktree.path}
+                </text>
+                {worktree.branch ? (
+                  <text style={{ fontSize: 10, color: '#9aa3b2' }}>{worktree.branch}</text>
+                ) : null}
+              </div>
+            ))
+          )}
+        </div>
+
         <div
           tabIndex={0}
-          onClick={spawnTerminal}
+          onClick={() => spawnTerminal()}
           style={{
             backgroundColor: '#2563eb',
             borderRadius: 6,
@@ -189,7 +298,7 @@ export function OrcaGpuixShell({ version }: OrcaGpuixShellProps): React.JSX.Elem
             Terminal output (node-pty via in-process IPC)
           </text>
           <text style={{ fontSize: 12, color: '#e8eaed', whiteSpace: 'pre-wrap' }}>
-            {terminalOutput || 'Click “Open terminal” to spawn a shell.'}
+            {terminalOutput || 'Select a worktree or click “Open terminal”.'}
           </text>
         </div>
       </div>

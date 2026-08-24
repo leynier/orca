@@ -3,6 +3,7 @@
  * Registers IPC handlers against the in-process electron shim.
  */
 import { installGpuixHostAdapters } from './gpuix-host-adapters'
+import { registerGpuixDomainHandlers } from './register-gpuix-domain-handlers'
 import { registerGpuixShellHandlers } from './register-gpuix-shell-handlers'
 import { createGpuixMainWindow, wireGpuixPtyIpc } from './gpuix-pty-wiring'
 
@@ -46,9 +47,10 @@ export async function bootstrapGpuixBackend(): Promise<GpuixBackendHandle> {
   await runtime.refreshRestoredOrchestrationAuthority()
   await runtime.reconcileLegacyWorkerTerminals()
 
-  registerGpuixShellHandlers(store)
-
   const mainWindow = createGpuixMainWindow()
+
+  registerGpuixShellHandlers(store)
+  registerGpuixDomainHandlers(mainWindow, store, runtime)
   wireGpuixPtyIpc(store, runtime, mainWindow)
 
   return { store, runtime }

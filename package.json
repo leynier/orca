@@ -61,6 +61,7 @@
     "dev:gpuix": "node config/scripts/build-gpuix.mjs && node config/scripts/run-gpuix-dev.mjs",
     "build:gpuix": "node config/scripts/build-gpuix.mjs",
     "build:gpuix:linux": "pnpm run build:gpuix && node config/scripts/package-gpuix-linux.mjs",
+    "build:gpuix:package": "pnpm run build:gpuix && node config/scripts/package-gpuix.mjs",
     "verify:gpuix-build": "node config/scripts/verify-gpuix-build.mjs",
     "build:relay": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON config/scripts/build-relay.mjs",
     "build:computer-macos": "node config/scripts/build-computer-macos.mjs",

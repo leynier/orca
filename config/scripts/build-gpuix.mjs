@@ -13,7 +13,6 @@ const BACKEND_ENTRY = join(ROOT, 'src/main/gpuix/main.ts')
 const SHIM_PATH = join(ROOT, 'src/main/gpuix/electron-shim.ts')
 
 const EXTERNAL = [
-  'electron',
   'node-pty',
   '@parcel/watcher',
   '@gpuix/native',
@@ -84,6 +83,10 @@ const result = await build({
 const electronImporters = new Set()
 for (const [file, info] of Object.entries(result.metafile.inputs)) {
   for (const imported of info.imports ?? []) {
+    const resolvedPath = imported.path ?? ''
+    if (resolvedPath.includes('electron-shim')) {
+      continue
+    }
     const specifier = imported.original ?? imported.path
     if (specifier === 'electron' && !file.includes('electron-shim')) {
       electronImporters.add(file)

@@ -7,6 +7,7 @@ import type { AppIdentity } from '../../shared/app-identity'
 import type { Repo } from '../../shared/repo-types'
 import type { Project } from '../../shared/project-types'
 import type { GlobalSettings } from '../../shared/global-settings-types'
+import type { Worktree } from '../../shared/worktree/types'
 
 export type GpuixShellApi = {
   app: {
@@ -17,12 +18,16 @@ export type GpuixShellApi = {
   }
   repos: {
     list: () => Promise<Repo[]>
+    onChanged: (callback: () => void) => () => void
   }
   projects: {
     list: () => Promise<Project[]>
   }
   worktrees: {
+    listAll: () => Promise<Worktree[]>
+    list: (repoId: string) => Promise<Worktree[]>
     metaSummary: () => Promise<{ count: number }>
+    onChanged: (callback: () => void) => () => void
   }
   pty: {
     rendererDispatcherReady: () => void
@@ -47,13 +52,25 @@ export function createGpuixShellApi(): GpuixShellApi {
       get: () => ipcRenderer.invoke('settings:get') as Promise<GlobalSettings>
     },
     repos: {
-      list: () => ipcRenderer.invoke('repos:list') as Promise<Repo[]>
+      list: () => ipcRenderer.invoke('repos:list') as Promise<Repo[]>,
+      onChanged: (callback) => {
+        const listener = (): void => callback()
+        ipcRenderer.on('repos:changed', listener)
+        return () => ipcRenderer.removeListener('repos:changed', listener)
+      }
     },
     projects: {
       list: () => ipcRenderer.invoke('projects:list') as Promise<Project[]>
     },
     worktrees: {
-      metaSummary: () => ipcRenderer.invoke('worktrees:metaSummary') as Promise<{ count: number }>
+      listAll: () => ipcRenderer.invoke('worktrees:listAll') as Promise<Worktree[]>,
+      list: (repoId) => ipcRenderer.invoke('worktrees:list', { repoId }) as Promise<Worktree[]>,
+      metaSummary: () => ipcRenderer.invoke('worktrees:metaSummary') as Promise<{ count: number }>,
+      onChanged: (callback) => {
+        const listener = (): void => callback()
+        ipcRenderer.on('worktrees:changed', listener)
+        return () => ipcRenderer.removeListener('worktrees:changed', listener)
+      }
     },
     pty: {
       rendererDispatcherReady: () => {

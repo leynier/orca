@@ -22,9 +22,6 @@ export function registerGpuixShellHandlers(store: Store): void {
 
   ipcMain.handle('settings:get', () => store.getSettings())
 
-  ipcMain.handle('repos:list', () => store.getRepos())
-  ipcMain.handle('projects:list', () => store.getProjects())
-
   ipcMain.handle('worktrees:metaSummary', () => {
     const meta = store.getAllWorktreeMeta()
     return { count: Object.keys(meta).length }
