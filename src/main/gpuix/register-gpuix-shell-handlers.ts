@@ -20,8 +20,6 @@ export function registerGpuixShellHandlers(store: Store): void {
     }
   })
 
-  ipcMain.handle('settings:get', () => store.getSettings())
-
   ipcMain.handle('worktrees:metaSummary', () => {
     const meta = store.getAllWorktreeMeta()
     return { count: Object.keys(meta).length }

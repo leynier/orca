@@ -111,15 +111,25 @@ export const webContents = {
   }
 }
 
-export const BrowserWindow = class {
-  static fromWebContents(contents: typeof gpuixWebContents): BrowserWindow | undefined {
-    return contents === gpuixWebContents ? new BrowserWindow() : undefined
+let gpuixMainWindowSingleton: GpuixBrowserWindow | null = null
+
+export function getGpuixMainWindowSingleton(): GpuixBrowserWindow {
+  if (!gpuixMainWindowSingleton) {
+    gpuixMainWindowSingleton = new GpuixBrowserWindow()
+  }
+  return gpuixMainWindowSingleton
+}
+
+export class GpuixBrowserWindow {
+  static fromWebContents(contents: typeof gpuixWebContents): GpuixBrowserWindow | undefined {
+    const win = gpuixMainWindowSingleton
+    return win && contents === gpuixWebContents ? win : undefined
   }
   static fromId(): undefined {
     return undefined
   }
-  static getAllWindows(): never[] {
-    return []
+  static getAllWindows(): GpuixBrowserWindow[] {
+    return gpuixMainWindowSingleton ? [gpuixMainWindowSingleton] : []
   }
   webContents = gpuixWebContents
   id = 1
@@ -144,6 +154,9 @@ export const BrowserWindow = class {
   once(): void {}
   removeListener(): void {}
 }
+
+/** Electron-compatible alias used by IPC handler modules. */
+export const BrowserWindow = GpuixBrowserWindow
 
 export const dialog = {
   showOpenDialog: async () => ({ canceled: true, filePaths: [] as string[] }),

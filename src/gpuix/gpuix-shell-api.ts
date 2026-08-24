@@ -15,6 +15,7 @@ export type GpuixShellApi = {
   }
   settings: {
     get: () => Promise<GlobalSettings>
+    onChanged: (callback: (updates: Partial<GlobalSettings>) => void) => () => void
   }
   repos: {
     list: () => Promise<Repo[]>
@@ -28,6 +29,9 @@ export type GpuixShellApi = {
     list: (repoId: string) => Promise<Worktree[]>
     metaSummary: () => Promise<{ count: number }>
     onChanged: (callback: () => void) => () => void
+  }
+  shell: {
+    openUrl: (url: string) => Promise<void>
   }
   pty: {
     rendererDispatcherReady: () => void
@@ -49,7 +53,13 @@ export function createGpuixShellApi(): GpuixShellApi {
       getIdentity: () => ipcRenderer.invoke('app:getIdentity') as Promise<AppIdentity>
     },
     settings: {
-      get: () => ipcRenderer.invoke('settings:get') as Promise<GlobalSettings>
+      get: () => ipcRenderer.invoke('settings:get') as Promise<GlobalSettings>,
+      onChanged: (callback) => {
+        const listener = (_event: unknown, updates: Partial<GlobalSettings>): void =>
+          callback(updates)
+        ipcRenderer.on('settings:changed', listener)
+        return () => ipcRenderer.removeListener('settings:changed', listener)
+      }
     },
     repos: {
       list: () => ipcRenderer.invoke('repos:list') as Promise<Repo[]>,
@@ -71,6 +81,9 @@ export function createGpuixShellApi(): GpuixShellApi {
         ipcRenderer.on('worktrees:changed', listener)
         return () => ipcRenderer.removeListener('worktrees:changed', listener)
       }
+    },
+    shell: {
+      openUrl: (url) => ipcRenderer.invoke('shell:openUrl', url) as Promise<void>
     },
     pty: {
       rendererDispatcherReady: () => {

@@ -1,8 +1,10 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
+import type { EventPayload } from '@gpuix/native'
 import type { AppIdentity } from '../../shared/app-identity'
 import type { Repo } from '../../shared/repo-types'
 import type { Worktree } from '../../shared/worktree/types'
 import type { GpuixShellApi } from '../gpuix-shell-api'
+import { gpuixKeyEventToTerminalInput } from './gpuix-terminal-key-input'
 
 type OrcaGpuixShellProps = {
   version: string
@@ -145,6 +147,17 @@ export function OrcaGpuixShell({ version }: OrcaGpuixShellProps): React.JSX.Elem
       .finally(() => setTerminalBusy(false))
   }
 
+  const handleTerminalKeyDown = (event: EventPayload): void => {
+    const api = getApi()
+    if (!api || !ptyId) {
+      return
+    }
+    const input = gpuixKeyEventToTerminalInput(event)
+    if (input) {
+      api.pty.write(ptyId, input)
+    }
+  }
+
   const repoWorktrees = selectedRepoId
     ? worktrees.filter((row) => row.repoId === selectedRepoId)
     : worktrees
@@ -283,6 +296,9 @@ export function OrcaGpuixShell({ version }: OrcaGpuixShellProps): React.JSX.Elem
         {error ? <text style={{ color: '#fca5a5', fontSize: 12 }}>Error: {error}</text> : null}
 
         <div
+          tabIndex={0}
+          autoFocus
+          onKeyDown={handleTerminalKeyDown}
           style={{
             display: 'flex',
             flexDirection: 'column',
@@ -295,7 +311,7 @@ export function OrcaGpuixShell({ version }: OrcaGpuixShellProps): React.JSX.Elem
           }}
         >
           <text style={{ fontSize: 11, color: '#9aa3b2', marginBottom: 8 }}>
-            Terminal output (node-pty via in-process IPC)
+            Terminal (click here, type to send keys via pty:write)
           </text>
           <text style={{ fontSize: 12, color: '#e8eaed', whiteSpace: 'pre-wrap' }}>
             {terminalOutput || 'Select a worktree or click “Open terminal”.'}
