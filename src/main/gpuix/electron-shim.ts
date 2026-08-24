@@ -14,7 +14,6 @@ let appEnvironment: AppEnvironment | null = null
 
 export function bindGpuixAppEnvironmentFromShim(environment: AppEnvironment): void {
   appEnvironment = environment
-  bindGpuixAppEnvironment(environment)
 }
 
 export const app = {

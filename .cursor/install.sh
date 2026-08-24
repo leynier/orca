@@ -23,16 +23,13 @@ corepack prepare pnpm@10.24.0 --activate >/dev/null 2>&1 || true
 node -v
 pnpm -v
 
-<<<<<<< HEAD
 # GPUIX runtime needs X11 keyboard + Vulkan on Linux.
 if [ "$(uname -s)" = "Linux" ]; then
   if command -v apt-get >/dev/null 2>&1; then
-  sudo apt-get update -qq
-  sudo apt-get install -y -qq libxkbcommon-x11-0 libxkbcommon0 libvulkan1 mesa-vulkan-drivers >/dev/null
+    sudo apt-get update -qq
+    sudo apt-get install -y -qq libxkbcommon-x11-0 libxkbcommon0 libvulkan1 mesa-vulkan-drivers >/dev/null
   fi
 fi
 
-=======
->>>>>>> origin/cursor/setup-cloud-agent-environment-f84b
 # node-pty and other native modules are rebuilt by the repo's postinstall.
 pnpm install --frozen-lockfile

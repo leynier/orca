@@ -4,6 +4,7 @@
  */
 import { installGpuixHostAdapters } from './gpuix-host-adapters'
 import { registerGpuixShellHandlers } from './register-gpuix-shell-handlers'
+import { createGpuixMainWindow, wireGpuixPtyIpc } from './gpuix-pty-wiring'
 
 import type { Store } from '../persistence'
 import type { OrcaRuntimeService } from '../runtime/orca-runtime'
@@ -46,6 +47,9 @@ export async function bootstrapGpuixBackend(): Promise<GpuixBackendHandle> {
   await runtime.reconcileLegacyWorkerTerminals()
 
   registerGpuixShellHandlers(store)
+
+  const mainWindow = createGpuixMainWindow()
+  wireGpuixPtyIpc(store, runtime, mainWindow)
 
   return { store, runtime }
 }

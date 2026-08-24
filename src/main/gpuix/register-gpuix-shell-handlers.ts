@@ -1,6 +1,5 @@
 /**
- * Minimal IPC handlers for the GPUIX shell bootstrap.
- * Avoids Electron-only modules (tray, dock badge, native dialogs) during migration.
+ * GPUIX IPC handlers — expands incrementally as renderer features migrate off Electron.
  */
 import { ipcMain } from './electron-shim'
 import type { Store } from '../persistence'
@@ -22,4 +21,7 @@ export function registerGpuixShellHandlers(store: Store): void {
   })
 
   ipcMain.handle('settings:get', () => store.getSettings())
+
+  ipcMain.handle('repos:list', () => store.getRepos())
+  ipcMain.handle('projects:list', () => store.getProjects())
 }

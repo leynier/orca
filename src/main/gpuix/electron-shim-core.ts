@@ -1,13 +1,23 @@
 import { EventEmitter } from 'node:events'
-import type { GpuixWebContents, IpcHandler, IpcListener, IpcMainEvent } from './electron-shim-types'
+import type {
+  GpuixWebContents,
+  IpcHandler,
+  IpcListener,
+  IpcMainEvent,
+  WebContentsListener
+} from './electron-shim-types'
 
 const invokeHandlers = new Map<string, IpcHandler>()
-const eventListeners = new Map<string, Set<IpcListener>>()
+/** Renderer → main (`ipcMain.on`, `ipc.on` in PTY handlers). */
+const mainEventListeners = new Map<string, Set<IpcListener>>()
+/** Main → renderer (`ipcRenderer.on`). */
+const rendererEventListeners = new Map<string, Set<IpcListener>>()
+const webContentsEmitter = new EventEmitter()
 
 export const gpuixWebContents: GpuixWebContents = {
   id: 1,
   send(channel: string, ...args: unknown[]) {
-    const listeners = eventListeners.get(channel)
+    const listeners = rendererEventListeners.get(channel)
     if (!listeners) {
       return
     }
@@ -16,7 +26,18 @@ export const gpuixWebContents: GpuixWebContents = {
       listener(event, ...args)
     }
   },
-  isDestroyed: () => false
+  isDestroyed: () => false,
+  on(event: string, listener: WebContentsListener): void {
+    webContentsEmitter.on(event, listener)
+  },
+  removeListener(event: string, listener: WebContentsListener): void {
+    webContentsEmitter.removeListener(event, listener)
+  }
+}
+
+/** PTY handlers wait for did-finish-load before arming delivery gates. */
+export function emitGpuixRendererDidFinishLoad(): void {
+  webContentsEmitter.emit('did-finish-load')
 }
 
 function makeInvokeEvent(): IpcMainEvent {
@@ -28,22 +49,22 @@ export const ipcMain = {
     invokeHandlers.set(channel, handler)
   },
   on(channel: string, listener: IpcListener): void {
-    const set = eventListeners.get(channel) ?? new Set()
+    const set = mainEventListeners.get(channel) ?? new Set()
     set.add(listener)
-    eventListeners.set(channel, set)
+    mainEventListeners.set(channel, set)
   },
   removeListener(channel: string, listener: IpcListener): void {
-    eventListeners.get(channel)?.delete(listener)
+    mainEventListeners.get(channel)?.delete(listener)
   },
   removeHandler(channel: string): void {
     invokeHandlers.delete(channel)
   },
   removeAllListeners(channel?: string): void {
     if (channel) {
-      eventListeners.delete(channel)
+      mainEventListeners.delete(channel)
       return
     }
-    eventListeners.clear()
+    mainEventListeners.clear()
   }
 }
 
@@ -56,7 +77,14 @@ export const ipcRenderer = {
     return Promise.resolve(handler(makeInvokeEvent(), ...args))
   },
   send(channel: string, ...args: unknown[]): void {
-    gpuixWebContents.send(channel, ...args)
+    const event = makeInvokeEvent()
+    const listeners = mainEventListeners.get(channel)
+    if (!listeners) {
+      return
+    }
+    for (const listener of listeners) {
+      listener(event, ...args)
+    }
   },
   sendSync(channel: string, ...args: unknown[]): unknown {
     const handler = invokeHandlers.get(channel)
@@ -66,10 +94,15 @@ export const ipcRenderer = {
     return handler(makeInvokeEvent(), ...args)
   },
   on(channel: string, listener: IpcListener): void {
-    ipcMain.on(channel, listener)
+    const set = rendererEventListeners.get(channel) ?? new Set()
+    set.add(listener)
+    rendererEventListeners.set(channel, set)
   },
   removeListener(channel: string, listener: IpcListener): void {
-    ipcMain.removeListener(channel, listener)
+    rendererEventListeners.get(channel)?.delete(listener)
+  },
+  listenerCount(channel: string): number {
+    return rendererEventListeners.get(channel)?.size ?? 0
   }
 }
 
