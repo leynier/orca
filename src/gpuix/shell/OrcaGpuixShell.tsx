@@ -14,6 +14,7 @@ function getApi(): GpuixShellApi | null {
 export function OrcaGpuixShell({ version }: OrcaGpuixShellProps): React.JSX.Element {
   const [identity, setIdentity] = useState<AppIdentity | null>(null)
   const [repos, setRepos] = useState<Repo[]>([])
+  const [worktreeCount, setWorktreeCount] = useState<number | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [terminalOutput, setTerminalOutput] = useState('')
   const [ptyId, setPtyId] = useState<string | null>(null)
@@ -37,6 +38,10 @@ export function OrcaGpuixShell({ version }: OrcaGpuixShellProps): React.JSX.Elem
       .list()
       .then((value) => setRepos(value))
       .catch(() => setRepos([]))
+    void api.worktrees
+      .metaSummary()
+      .then((summary) => setWorktreeCount(summary.count))
+      .catch(() => setWorktreeCount(0))
 
     void api.pty
       .spawn({ cols: 80, rows: 24, command: '/bin/bash -lc "echo Orca GPUIX terminal ready"' })
@@ -159,6 +164,10 @@ export function OrcaGpuixShell({ version }: OrcaGpuixShellProps): React.JSX.Elem
         <div style={{ display: 'flex', flexDirection: 'row', gap: 12 }}>
           <StatusCard label="Profile" value={identity?.name ?? '…'} />
           <StatusCard label="Repos" value={String(repos.length)} />
+          <StatusCard
+            label="Worktrees"
+            value={worktreeCount === null ? '…' : String(worktreeCount)}
+          />
           <StatusCard label="PTY" value={ptyId ?? 'none'} />
         </div>
 

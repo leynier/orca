@@ -21,6 +21,9 @@ export type GpuixShellApi = {
   projects: {
     list: () => Promise<Project[]>
   }
+  worktrees: {
+    metaSummary: () => Promise<{ count: number }>
+  }
   pty: {
     rendererDispatcherReady: () => void
     setActiveRendererPty: (id: string, active: boolean) => void
@@ -48,6 +51,9 @@ export function createGpuixShellApi(): GpuixShellApi {
     },
     projects: {
       list: () => ipcRenderer.invoke('projects:list') as Promise<Project[]>
+    },
+    worktrees: {
+      metaSummary: () => ipcRenderer.invoke('worktrees:metaSummary') as Promise<{ count: number }>
     },
     pty: {
       rendererDispatcherReady: () => {
