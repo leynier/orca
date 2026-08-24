@@ -43,6 +43,12 @@ importers:
       '@floating-ui/dom':
         specifier: 1.7.6
         version: 1.7.6
+      '@gpuix/native':
+        specifier: 0.4.0
+        version: 0.4.0
+      '@gpuix/react':
+        specifier: 0.4.0
+        version: 0.4.0(react@19.2.7)
       '@linear/sdk':
         specifier: ^82.1.0
         version: 82.1.0(graphql@16.14.2)
@@ -868,6 +874,46 @@ packages:
 
   '@floating-ui/utils@0.2.11':
     resolution: {integrity: sha512-RiB/yIh78pcIxl6lLMG0CgBXAZ2Y0eVHqMPYugu+9U0AeT6YBeiJpf7lbdJNIugFP5SIjwNRgo4DhR1Qxi26Gg==}
+
+  '@gpuix/native-darwin-arm64@0.4.0':
+    resolution: {integrity: sha512-9Q2RrumKpeHhNE0gTNkYINDvlysPpr/fCslwaiRXbtwl9Tz8Ry0R+Pq6semoaMPVVZx4BM268e4juPtPFV6WqA==}
+    cpu: [arm64]
+    os: [darwin]
+
+  '@gpuix/native-darwin-x64@0.4.0':
+    resolution: {integrity: sha512-gmTum1bADvDsxgkv4BNfjdxQ+Nx04QRDYmRc7wFuJb7M20gay/jVdsgrsUL+fNasTsfiLnYajf+YKS5OcZP9cg==}
+    cpu: [x64]
+    os: [darwin]
+
+  '@gpuix/native-linux-arm64-gnu@0.4.0':
+    resolution: {integrity: sha512-KKvI758LxgWKNEWctvFBKNr/9FRYsr2gBfLNIy8c2mFvjzJmvEo6I43Ve8ck6AP1yLchzK5vmiOUpGpRuIdwmA==}
+    cpu: [arm64]
+    os: [linux]
+    libc: [glibc]
+
+  '@gpuix/native-linux-x64-gnu@0.4.0':
+    resolution: {integrity: sha512-dzZjYuWml10a2KGP0ZsnuZI1POS/i7Yn4naRVliF7chVN5CqvQdyBkLlBN4DITnNaBW4FIAdgo4zAMscuUhFzw==}
+    cpu: [x64]
+    os: [linux]
+    libc: [glibc]
+
+  '@gpuix/native-win32-arm64-msvc@0.4.0':
+    resolution: {integrity: sha512-g7OgtOyKe5pS4NbaK09WP3cFOm3pIbOyVK2kl02+/XAKg1XPWAlgVx2GvXARWvWsm2YpCV8S2qOEu7T++kfECw==}
+    cpu: [arm64]
+    os: [win32]
+
+  '@gpuix/native-win32-x64-msvc@0.4.0':
+    resolution: {integrity: sha512-T11cRtupmbJOKx+NrbPXdzkebVzl2GzJ24fNwCYpmA9OBgcJZe0AMNCu+KjiTVlZLsZ4yEy/41YQiSAcEy/h4A==}
+    cpu: [x64]
+    os: [win32]
+
+  '@gpuix/native@0.4.0':
+    resolution: {integrity: sha512-Ajmv7aBjcze+umGWFeMcY3JXzXP8LolF8sPEPF+UfKTon60fD5V295cBDPV2zKpg/gRc6TdbB3/bKWv/WHDjzw==}
+
+  '@gpuix/react@0.4.0':
+    resolution: {integrity: sha512-swTjiQD3wvK66S+JJaAkmK1JPCYu0gsbK/0p1nuO5nKGhygCvrJUv0AuIr+Eyqbbc65QyI1ead0I5zZmkc8LFA==}
+    peerDependencies:
+      react: ^18.0.0 || ^19.0.0
 
   '@graphql-typed-document-node/core@3.2.0':
     resolution: {integrity: sha512-mB9oAsNCm9aM3/SOv4YtBMqZbYj10R7dkq8byBqxGY/ncFwhf2oQzMV+LCRlWoDSEBJ3COiR1yeDvMtsoOsuFQ==}
@@ -4343,6 +4389,10 @@ packages:
     resolution: {integrity: sha512-70QWGkr4snxr0OXLRWsFLeRBIRPuQOvt4s8QYjmUlmlkyTZkRqS7EDVRZtzU3TiyDbXSzaOeF0XUKy8PchzukQ==}
     engines: {node: '>=18.0.0'}
 
+  eventsource-parser@4.1.0:
+    resolution: {integrity: sha512-+DHvQ1wLO//MK+1OZgcuXCbZFKgu3YjKPJt7n98rxX8vezL0ni+7s3ZQiM8bJkUEOk7MsuCycrPLj0FzUNf7Og==}
+    engines: {node: '>=22.12'}
+
   eventsource@3.0.7:
     resolution: {integrity: sha512-CRT1WTyuQoD771GW56XEZFQ/ZoSfWid1alKGDYMmkt2yl8UXrVR4pspqWNEcqKvVIzg6PAltWjxcSSPrboA4iA==}
     engines: {node: '>=18.0.0'}
@@ -5910,6 +5960,12 @@ packages:
       '@types/react': '>=18'
       react: '>=18'
 
+  react-reconciler@0.31.0:
+    resolution: {integrity: sha512-7Ob7Z+URmesIsIVRjnLoDGwBEG/tVitidU0nMsqX/eeJaLY89RISO/10ERe0MqmzuKUUB1rmY+h1itMbUHg9BQ==}
+    engines: {node: '>=0.10.0'}
+    peerDependencies:
+      react: ^19.0.0
+
   react-refresh@0.18.0:
     resolution: {integrity: sha512-QgT5//D3jfjJb6Gsjxv0Slpj23ip+HtOpnNgnb2S5zU3CB26G/IDPGoy4RJB42wzFE46DRsstbW6tKHoKbhAxw==}
     engines: {node: '>=0.10.0'}
@@ -6144,6 +6200,9 @@ packages:
   sax@1.6.0:
     resolution: {integrity: sha512-6R3J5M4AcbtLUdZmRv2SygeVaM7IhrLXu9BmnOGmmACak8fiUtOsYNWUS4uK7upbmHIBbLBeFeI//477BKLBzA==}
     engines: {node: '>=11.0.0'}
+
+  scheduler@0.25.0:
+    resolution: {integrity: sha512-xFVuu11jh+xcO7JOAGJNOXld8/TcEHK/4CituBUeUb5hqxJLj9YuemAEuvm9gQ/+pgXYfbQuqAkiYu+u7YEsNA==}
 
   scheduler@0.27.0:
     resolution: {integrity: sha512-eNv+WrVbKu1f3vbYJT/xtiF5syA5HPIMtf9IgY/nKg0sWqzAUEvqY/xm7OcZc/qafLx/iO9FgOmeSAp4v5ti/Q==}
@@ -7358,6 +7417,41 @@ snapshots:
       react-dom: 19.2.7(react@19.2.7)
 
   '@floating-ui/utils@0.2.11': {}
+
+  '@gpuix/native-darwin-arm64@0.4.0':
+    optional: true
+
+  '@gpuix/native-darwin-x64@0.4.0':
+    optional: true
+
+  '@gpuix/native-linux-arm64-gnu@0.4.0':
+    optional: true
+
+  '@gpuix/native-linux-x64-gnu@0.4.0':
+    optional: true
+
+  '@gpuix/native-win32-arm64-msvc@0.4.0':
+    optional: true
+
+  '@gpuix/native-win32-x64-msvc@0.4.0':
+    optional: true
+
+  '@gpuix/native@0.4.0':
+    optionalDependencies:
+      '@gpuix/native-darwin-arm64': 0.4.0
+      '@gpuix/native-darwin-x64': 0.4.0
+      '@gpuix/native-linux-arm64-gnu': 0.4.0
+      '@gpuix/native-linux-x64-gnu': 0.4.0
+      '@gpuix/native-win32-arm64-msvc': 0.4.0
+      '@gpuix/native-win32-x64-msvc': 0.4.0
+
+  '@gpuix/react@0.4.0(react@19.2.7)':
+    dependencies:
+      '@gpuix/native': 0.4.0
+      eventsource-parser: 4.1.0
+      react: 19.2.7
+      react-reconciler: 0.31.0(react@19.2.7)
+      zod: 4.4.3
 
   '@graphql-typed-document-node/core@3.2.0(graphql@16.14.2)':
     dependencies:
@@ -10605,6 +10699,8 @@ snapshots:
 
   eventsource-parser@3.0.8: {}
 
+  eventsource-parser@4.1.0: {}
+
   eventsource@3.0.7:
     dependencies:
       eventsource-parser: 3.0.8
@@ -12632,6 +12728,11 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
+  react-reconciler@0.31.0(react@19.2.7):
+    dependencies:
+      react: 19.2.7
+      scheduler: 0.25.0
+
   react-refresh@0.18.0: {}
 
   react-remove-scroll-bar@2.3.8(@types/react@19.2.17)(react@19.2.7):
@@ -12917,6 +13018,8 @@ snapshots:
       truncate-utf8-bytes: 1.0.2
 
   sax@1.6.0: {}
+
+  scheduler@0.25.0: {}
 
   scheduler@0.27.0: {}
 
